@@ -7,10 +7,14 @@ import (
 	stackHelper "github.com/faryne/go-cdk-example/libs/stack_helper"
 )
 
+type Result struct {
+	Stack awscdk.Stack
+}
+
 var stack *stackHelper.MyCDKStack
 
-func Init(parentStack awscdk.CfnStack, stackName *string, props *awscdk.CfnStackProps) *stackHelper.MyCDKStack {
-	stack = stackHelper.New(parentStack, stackName, props)
+func Init(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) Result {
+	stack := awscdk.NewStack(parentStack, stackName, props)
 
 	// 建立 EKS cluster
 	stack.AddResource([]awscdk.CfnResource{}, createEksCluster)
