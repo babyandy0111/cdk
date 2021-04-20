@@ -12,13 +12,18 @@ var envType = os.Getenv("ENVTYPE")
 func main() {
 	app := awscdk.NewApp(nil)
 
-	//accountId := os.Getenv("ACCOUNT_ID")
-	//region := os.Getenv("REGION")
+	accountId := os.Getenv("ACCOUNT_ID")
+	region := os.Getenv("REGION")
 
-	props := awscdk.CfnStackProps{}
+	props := awscdk.StackProps{
+		Env: &awscdk.Environment{
+			Account: jsii.String(accountId),
+			Region:  jsii.String(region),
+		},
+	}
 
 	// 建立 root stack
-	rootStack := awscdk.NewCfnStack(app, jsii.String("PreviewRootStack"), &props)
+	rootStack := awscdk.NewStack(app, jsii.String("TEST-PreviewRootStack"), &props)
 	// 建立 VPC Stack
 	vpc.Init(rootStack, jsii.String("VPCStack"), &props)
 
