@@ -10,20 +10,41 @@ var (
 	newVpcSourceId = "newVpcSourceId"
 )
 
-type Result struct {
+type VpcResult struct {
 	Stack awscdk.Stack
 	Vpc   awsec2.Vpc
 }
 
-func Init(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) Result {
+func Init(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) VpcResult {
 	stack := awscdk.NewStack(parentStack, stackName, props)
 
 	// 建立 VPC
 	vpc := newVpc(stack, jsii.String("10.101.0.0/16"), jsii.Number(float64(20)))
 
-	return Result{
+	return VpcResult{
 		Stack: stack,
 		Vpc:   vpc,
+	}
+}
+
+func GetSubnet(vpc awsec2.Vpc, subnetType awsec2.SubnetType) awsec2.SubnetSelection {
+	switch subnetType {
+	case awsec2.SubnetType_PRIVATE:
+		return awsec2.SubnetSelection{
+			Subnets: vpc.PrivateSubnets(),
+		}
+	case awsec2.SubnetType_PUBLIC:
+		return awsec2.SubnetSelection{
+			Subnets: vpc.PublicSubnets(),
+		}
+	case awsec2.SubnetType_ISOLATED:
+	default:
+		return awsec2.SubnetSelection{
+			Subnets: vpc.IsolatedSubnets(),
+		}
+	}
+	return awsec2.SubnetSelection{
+		Subnets: vpc.PublicSubnets(),
 	}
 }
 

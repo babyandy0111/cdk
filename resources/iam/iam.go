@@ -1,0 +1,4 @@
+package iam
+
+func NewIAM() {
+}
