@@ -18,3 +18,8 @@
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+
+.env
+deployment.yaml
+cdk.context.json

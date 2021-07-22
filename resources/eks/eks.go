@@ -6,6 +6,8 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/awseks"
 	"github.com/aws/jsii-runtime-go"
 	stackHelper "github.com/faryne/go-cdk-example/libs/stack_helper"
+	"os"
+	"strings"
 )
 
 type EKSResult struct {
@@ -13,10 +15,6 @@ type EKSResult struct {
 }
 
 var stack *stackHelper.MyCDKStack
-var allowedIPS = awseks.EndpointAccess_PUBLIC_AND_PRIVATE().OnlyFrom(
-	jsii.String("myip1/32"),
-	jsii.String("myip2/32"),
-)
 
 func Init(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps, vpc awsec2.Vpc) EKSResult {
 	stack := awscdk.NewStack(parentStack, stackName, props)
@@ -44,6 +42,10 @@ func GetSubnetSelection(vpc awsec2.Vpc) *[]*awsec2.SubnetSelection {
 
 func newEksFargetCluster(stack awscdk.Stack, vpc awsec2.Vpc) awseks.FargateCluster {
 	subnet := GetSubnetSelection(vpc)
+	var allowedIPS = awseks.EndpointAccess_PUBLIC_AND_PRIVATE().OnlyFrom(
+		jsii.String(os.Getenv("ALLOWED_IP1")),
+		jsii.String(os.Getenv("ALLOWED_IP2")),
+	)
 	resource := awseks.NewFargateCluster(stack, jsii.String("EKSFargateCluster"), &awseks.FargateClusterProps{
 		Version:             awseks.KubernetesVersion_V1_19(),
 		ClusterName:         jsii.String("PreviewFargateCluster"),
@@ -116,6 +118,12 @@ func newEksFargetCluster(stack awscdk.Stack, vpc awsec2.Vpc) awseks.FargateClust
 }
 func newEksEC2Cluster(stack awscdk.Stack, vpc awsec2.Vpc) awseks.Cluster {
 	subnet := GetSubnetSelection(vpc)
+	inputIPS := strings.Split(os.Getenv("ALLOWED_IPS"), ",")
+	var allowedIpsArray = make([]*string, 0)
+	for _, v := range inputIPS {
+		allowedIpsArray = append(allowedIpsArray, jsii.String(v))
+	}
+
 	resource := awseks.NewCluster(stack, jsii.String("EKSEC2Cluster"), &awseks.ClusterProps{
 		Version:             awseks.KubernetesVersion_V1_19(),
 		ClusterName:         jsii.String("PreviewEC2Cluster"),
@@ -127,7 +135,7 @@ func newEksEC2Cluster(stack awscdk.Stack, vpc awsec2.Vpc) awseks.Cluster {
 		VpcSubnets: subnet,
 		//ClusterHandlerEnvironment: nil,
 		CoreDnsComputeType: awseks.CoreDnsComputeType_EC2,
-		EndpointAccess:     allowedIPS,
+		EndpointAccess:     awseks.EndpointAccess_PUBLIC_AND_PRIVATE().OnlyFrom(allowedIpsArray...),
 		//KubectlEnvironment:       nil,
 		//KubectlLayer:             nil,
 		KubectlMemory: awscdk.Size_Gibibytes(jsii.Number(float64(1))),

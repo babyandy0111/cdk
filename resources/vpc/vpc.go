@@ -4,6 +4,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awsec2"
 	"github.com/aws/jsii-runtime-go"
+	"os"
 )
 
 var (
@@ -19,7 +20,7 @@ func Init(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps)
 	stack := awscdk.NewStack(parentStack, stackName, props)
 
 	// 建立 VPC
-	vpc := newVpc(stack, jsii.String("10.101.0.0/16"), jsii.Number(float64(20)))
+	vpc := newVpc(stack, jsii.String(os.Getenv("VPC_IP_RANGE")), jsii.Number(float64(20)))
 
 	return VpcResult{
 		Stack: stack,
@@ -69,6 +70,35 @@ func newVpc(stack awscdk.Stack, CidrBlock *string, CidrMask *float64) awsec2.Vpc
 		EnableDnsSupport:    jsii.Bool(true),
 		SubnetConfiguration: &subnets,
 	})
+	awscdk.Tags_Of(resource).Add(
+		jsii.String(os.Getenv("TAG_ENVTYPE_NAME")),
+		jsii.String(os.Getenv("ENVTYPE")),
+		&awscdk.TagProps{
+			IncludeResourceTypes: &[]*string{
+				jsii.String("AWS::EC2::Subnet"),
+				jsii.String("AWS::EC2::VPC"),
+			},
+		},
+	)
+	awscdk.Tags_Of(resource).Add(
+		jsii.String(os.Getenv("TAG_SERVICETYPE_NAME")),
+		jsii.String("SUBNET"),
+		&awscdk.TagProps{
+			IncludeResourceTypes: &[]*string{
+				jsii.String("AWS::EC2::Subnet"),
+				jsii.String("AWS::EC2::VPC"),
+			},
+		},
+	)
+	awscdk.Tags_Of(resource).Add(
+		jsii.String(os.Getenv("TAG_SERVICETYPE_NAME")),
+		jsii.String("VPC"),
+		&awscdk.TagProps{
+			IncludeResourceTypes: &[]*string{
+				jsii.String("AWS::EC2::VPC"),
+			},
+		},
+	)
 
 	return resource
 }
