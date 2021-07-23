@@ -8,6 +8,7 @@ import (
 	"github.com/faryne/go-cdk-example/resources/acm"
 	"github.com/faryne/go-cdk-example/resources/ecs"
 	"github.com/faryne/go-cdk-example/resources/eks"
+	"github.com/faryne/go-cdk-example/resources/servicediscovery"
 	"github.com/faryne/go-cdk-example/resources/vpc"
 	"github.com/joho/godotenv"
 	"os"
@@ -56,22 +57,23 @@ func main() {
 	fmt.Println(*acmStack.StackName())
 	fmt.Println(*acmResource.CertificateArn())
 
-	// 建立 ECS Cluster
+	// 建立 cloudmap 相關服務（for service discovery）
+	props.StackName = jsii.String("ServiceDiscoveryStack")
+	serviceDiscoveryStack := servicediscovery.NewServiceDiscovery(rootStack, jsii.String("ServiceDiscoveryStack"), Vpc.Vpc, &props)
+	internalNamespace := serviceDiscoveryStack.NewInternalPrivateDnsNamespace("management.internal", "internal service for core system")
+	/*clientNamespace := */ serviceDiscoveryStack.NewInternalClientDnsNamespace("client.internal", "client service for client system")
+
+	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String("ECSStack")
 	ecsStack := ecs.NewECS(rootStack, jsii.String("ECSStack"), Vpc.Vpc, acmResource, &props)
 	ecsStack.Stack.AddDependency(Vpc.Stack, jsii.String("Waiting for VPCStack update"))
+	ecsStack.Stack.AddDependency(serviceDiscoveryStack.Stack, jsii.String("Waiting for ServiceDiscoveryStack update"))
+	ecsStack.SetCloudmapDnsNamespace(internalNamespace)
 	ecsStack.CreateCluster("Preview-ECS-Cluster", Vpc.Vpc)
 
 	// 建立 ECS TaskDefinition
 	ecsStack.RegisterTaskDefinitionAPIManagementBackend("preview-api-man-backend", e["PRIMARY_ECSTASK_ENV"])
 	ecsStack.RegisterTaskDefinitionAPIManagementFrontend("preview-api-man-frontend")
-
-	// 建立 Load Balancer Stack
-	//subnet := vpc.GetSubnet(Vpc.Vpc, awsec2.SubnetType_PUBLIC)
-	//props.StackName = jsii.String("LoadBalancerStack")
-	//lbStack, _, _ := ec2.NewLoadBalancer(rootStack, jsii.String("LoadBalancerStack"), &props, Vpc.Vpc, &subnet, acmCertificate)
-	//lbStack.AddDependency(Vpc.Stack, jsii.String("Load Balancer needs VPC is set"))
-	//lbStack.AddDependency(acmStack, jsii.String("Load Balancer needs ACM is set"))
 
 	app.Synth(nil)
 }
