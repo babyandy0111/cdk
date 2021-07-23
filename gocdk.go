@@ -74,6 +74,7 @@ func main() {
 	// 建立 ECS TaskDefinition
 	ecsStack.RegisterTaskDefinitionAPIManagementBackend("preview-api-man-backend", e["PRIMARY_ECSTASK_ENV"])
 	ecsStack.RegisterTaskDefinitionAPIManagementFrontend("preview-api-man-frontend")
+	ecsStack.RegisterTaskDefinitionAPIGateway("preview-api-man-apigateway", e["APIGATEWAY_ECSTASK_ENV"])
 
 	app.Synth(nil)
 }

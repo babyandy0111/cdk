@@ -213,6 +213,15 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 		StreamPrefix: jsii.String("log-message-"),
 		LogGroup:     backendLogGroup,
 	})
+	redisLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-backend-redis"), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String("preview-backend-redis"),
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+		Retention:     awslogs.RetentionDays_ONE_MONTH,
+	})
+	redisLogDriver := awsecs.NewAwsLogDriver(&awsecs.AwsLogDriverProps{
+		StreamPrefix: jsii.String("log-message-"),
+		LogGroup:     redisLogGroup,
+	})
 	def := awsecs.NewTaskDefinition(stack.Stack, jsii.String(name), &awsecs.TaskDefinitionProps{
 		ExecutionRole: stack.Role,
 		Family:        jsii.String(name),
@@ -236,6 +245,26 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 			{
 				ContainerPort: jsii.Number(8080),
 				HostPort:      jsii.Number(8080),
+				Protocol:      awsecs.Protocol_TCP,
+			},
+		},
+		StartTimeout: awscdk.Duration_Seconds(jsii.Number(10)),
+		StopTimeout:  awscdk.Duration_Seconds(jsii.Number(10)),
+	})
+	redisImage := awsecs.ContainerImage_FromRegistry(jsii.String("redis:6.2.3-alpine"), &awsecs.RepositoryImageProps{})
+	redisContainer := def.AddContainer(jsii.String("api-backend-redis"), &awsecs.ContainerDefinitionOptions{
+		Image:                redisImage,
+		Cpu:                  jsii.Number(128),
+		DisableNetworking:    jsii.Bool(false),
+		Environment:          &envContent,
+		Essential:            jsii.Bool(true),
+		Logging:              redisLogDriver,
+		MemoryLimitMiB:       jsii.Number(256),
+		MemoryReservationMiB: jsii.Number(256),
+		PortMappings: &[]*awsecs.PortMapping{
+			{
+				ContainerPort: jsii.Number(6379),
+				HostPort:      jsii.Number(6379),
 				Protocol:      awsecs.Protocol_TCP,
 			},
 		},
@@ -279,6 +308,32 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 	})
 
 	// 建立 Service
+	service := awsecs.NewFargateService(stack.Stack, jsii.String("preview-ecs-backend"), &awsecs.FargateServiceProps{
+		Cluster: stack.Cluster,
+		CloudMapOptions: &awsecs.CloudMapOptions{
+			CloudMapNamespace: stack.CloudMapNamespace,
+			Container:         redisContainer,
+			ContainerPort:     jsii.Number(6379),
+			DnsRecordType:     "A",
+			DnsTtl:            awscdk.Duration_Seconds(jsii.Number(300)),
+			Name:              jsii.String("redis-backend"),
+		},
+		DesiredCount:           jsii.Number(1),
+		HealthCheckGracePeriod: awscdk.Duration_Seconds(jsii.Number(10)),
+		MaxHealthyPercent:      jsii.Number(200),
+		MinHealthyPercent:      jsii.Number(100),
+		ServiceName:            jsii.String("preview-api-backend"),
+		TaskDefinition:         def,
+		AssignPublicIp:         jsii.Bool(false),
+		SecurityGroups: &[]awsec2.ISecurityGroup{
+			stack.ContainerSecurityGroup,
+		},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+	})
+	// 註冊進targetgroup
+	targetgroup.AddTarget([]awselasticloadbalancingv2.IApplicationLoadBalancerTarget{
+		service,
+	}...)
 
 	return def
 }
@@ -415,5 +470,103 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 	targetgroup.AddTarget([]awselasticloadbalancingv2.IApplicationLoadBalancerTarget{
 		service,
 	}...)
+	return def
+}
+func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(name string, env map[string]string) awsecs.TaskDefinition {
+	apigatewayLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-backend-apigateway"), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String("preview-backend-apigateway"),
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+		Retention:     awslogs.RetentionDays_ONE_MONTH,
+	})
+	apigatewayLogDriver := awsecs.NewAwsLogDriver(&awsecs.AwsLogDriverProps{
+		StreamPrefix: jsii.String("log-message-"),
+		LogGroup:     apigatewayLogGroup,
+	})
+	redisLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-apigateway-redis"), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String("preview-apigateway-redis"),
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+		Retention:     awslogs.RetentionDays_ONE_MONTH,
+	})
+	redisLogDriver := awsecs.NewAwsLogDriver(&awsecs.AwsLogDriverProps{
+		StreamPrefix: jsii.String("log-message-"),
+		LogGroup:     redisLogGroup,
+	})
+	def := awsecs.NewTaskDefinition(stack.Stack, jsii.String(name), &awsecs.TaskDefinitionProps{
+		ExecutionRole: stack.Role,
+		Family:        jsii.String(name),
+		TaskRole:      stack.Role,
+		Compatibility: awsecs.Compatibility_FARGATE,
+		Cpu:           jsii.String("256"),
+		MemoryMiB:     jsii.String("512"),
+	})
+	envContent := stack.generateMapPointer(env)
+	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/apigateway:latest"), &awsecs.RepositoryImageProps{})
+	def.AddContainer(jsii.String("api-backend"), &awsecs.ContainerDefinitionOptions{
+		Image:                backendContainer,
+		Cpu:                  jsii.Number(128),
+		DisableNetworking:    jsii.Bool(false),
+		Environment:          &envContent,
+		Essential:            jsii.Bool(true),
+		Logging:              apigatewayLogDriver,
+		MemoryLimitMiB:       jsii.Number(256),
+		MemoryReservationMiB: jsii.Number(256),
+		PortMappings: &[]*awsecs.PortMapping{
+			{
+				ContainerPort: jsii.Number(8080),
+				HostPort:      jsii.Number(8080),
+				Protocol:      awsecs.Protocol_TCP,
+			},
+		},
+		StartTimeout: awscdk.Duration_Seconds(jsii.Number(10)),
+		StopTimeout:  awscdk.Duration_Seconds(jsii.Number(10)),
+	})
+	redisImage := awsecs.ContainerImage_FromRegistry(jsii.String("redis:6.2.3-alpine"), &awsecs.RepositoryImageProps{})
+	redisContainer := def.AddContainer(jsii.String("api-backend-redis"), &awsecs.ContainerDefinitionOptions{
+		Image:                redisImage,
+		Cpu:                  jsii.Number(128),
+		DisableNetworking:    jsii.Bool(false),
+		Environment:          &envContent,
+		Essential:            jsii.Bool(true),
+		Logging:              redisLogDriver,
+		MemoryLimitMiB:       jsii.Number(256),
+		MemoryReservationMiB: jsii.Number(256),
+		PortMappings: &[]*awsecs.PortMapping{
+			{
+				ContainerPort: jsii.Number(6379),
+				HostPort:      jsii.Number(6379),
+				Protocol:      awsecs.Protocol_TCP,
+			},
+		},
+		StartTimeout: awscdk.Duration_Seconds(jsii.Number(10)),
+		StopTimeout:  awscdk.Duration_Seconds(jsii.Number(10)),
+	})
+	// 建立 Service
+	service := awsecs.NewFargateService(stack.Stack, jsii.String("preview-ecs-apigateway"), &awsecs.FargateServiceProps{
+		Cluster: stack.Cluster,
+		CloudMapOptions: &awsecs.CloudMapOptions{
+			CloudMapNamespace: stack.CloudMapNamespace,
+			Container:         redisContainer,
+			ContainerPort:     jsii.Number(6379),
+			DnsRecordType:     "A",
+			DnsTtl:            awscdk.Duration_Seconds(jsii.Number(300)),
+			Name:              jsii.String("redis-apigateway"),
+		},
+		DesiredCount:           jsii.Number(1),
+		HealthCheckGracePeriod: awscdk.Duration_Seconds(jsii.Number(10)),
+		MaxHealthyPercent:      jsii.Number(200),
+		MinHealthyPercent:      jsii.Number(100),
+		ServiceName:            jsii.String("preview-apigateway"),
+		TaskDefinition:         def,
+		AssignPublicIp:         jsii.Bool(false),
+		SecurityGroups: &[]awsec2.ISecurityGroup{
+			stack.ContainerSecurityGroup,
+		},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+	})
+	// 註冊進targetgroup
+	stack.DefaultTargetGroup.AddTarget([]awselasticloadbalancingv2.IApplicationLoadBalancerTarget{
+		service,
+	}...)
+
 	return def
 }
