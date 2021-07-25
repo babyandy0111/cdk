@@ -15,17 +15,18 @@ import (
 )
 
 type ECSStack struct {
-	Stack                  awscdk.Stack
-	Role                   awsiam.Role
-	Cluster                awsecs.Cluster
-	Vpc                    awsec2.Vpc
-	CloudMapNamespace      awsservicediscovery.PrivateDnsNamespace
-	LB                     awselasticloadbalancingv2.ApplicationLoadBalancer
-	LBSecurityGroup        awsec2.SecurityGroup
-	ContainerSecurityGroup awsec2.SecurityGroup
-	Listener80             awselasticloadbalancingv2.ApplicationListener
-	Listener443            awselasticloadbalancingv2.ApplicationListener
-	DefaultTargetGroup     awselasticloadbalancingv2.ApplicationTargetGroup
+	Stack                     awscdk.Stack
+	Role                      awsiam.Role
+	Cluster                   awsecs.Cluster
+	Vpc                       awsec2.Vpc
+	CloudMapNamespace         awsservicediscovery.PrivateDnsNamespace
+	LB                        awselasticloadbalancingv2.ApplicationLoadBalancer
+	LBSecurityGroup           awsec2.SecurityGroup
+	ContainerSecurityGroup    awsec2.SecurityGroup
+	Listener80                awselasticloadbalancingv2.ApplicationListener
+	Listener443               awselasticloadbalancingv2.ApplicationListener
+	DefaultTargetGroup        awselasticloadbalancingv2.ApplicationTargetGroup
+	CloudMapNamespacesMapping map[string]awsservicediscovery.PrivateDnsNamespace
 }
 
 func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert awscertificatemanager.Certificate, props *awscdk.StackProps) *ECSStack {
@@ -53,6 +54,8 @@ func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert aw
 	containerSG.AddIngressRule(awsec2.Peer_Ipv4(jsii.String("10.0.0.0/8")), awsec2.Port_Tcp(jsii.Number(5001)), jsii.String("For GRPC Webpackager"), jsii.Bool(false))
 	containerSG.AddIngressRule(awsec2.Peer_Ipv4(jsii.String("10.0.0.0/8")), awsec2.Port_Tcp(jsii.Number(6379)), jsii.String("For Redis Usage"), jsii.Bool(false))
 	containerSG.AddIngressRule(awsec2.Peer_Ipv4(jsii.String("10.0.0.0/8")), awsec2.Port_Tcp(jsii.Number(8080)), jsii.String("For HTTP Backend"), jsii.Bool(false))
+	awscdk.Tags_Of(containerSG).Add(jsii.String(os.Getenv("TAG_ENVTYPE_NAME")), jsii.String(os.Getenv("ENVTYPE")), &awscdk.TagProps{})
+	awscdk.Tags_Of(containerSG).Add(jsii.String(os.Getenv("TAG_SERVICETYPE_NAME")), jsii.String("CONTAINER_SECURITY_GROUP"), &awscdk.TagProps{})
 	// 建立專用 Application Load Balancer
 	lb := awselasticloadbalancingv2.NewApplicationLoadBalancer(stack, jsii.String("preview-api-main-lb"), &awselasticloadbalancingv2.ApplicationLoadBalancerProps{
 		Vpc:                vpc,
@@ -114,20 +117,24 @@ func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert aw
 		LoadBalancer: lb,
 	})
 	return &ECSStack{
-		Stack:                  stack,
-		Role:                   role,
-		Vpc:                    vpc,
-		LB:                     lb,
-		LBSecurityGroup:        sg,
-		ContainerSecurityGroup: containerSG,
-		Listener80:             listener80,
-		Listener443:            listener443,
-		DefaultTargetGroup:     defaultTargetGroup,
+		Stack:                     stack,
+		Role:                      role,
+		Vpc:                       vpc,
+		LB:                        lb,
+		LBSecurityGroup:           sg,
+		ContainerSecurityGroup:    containerSG,
+		Listener80:                listener80,
+		Listener443:               listener443,
+		DefaultTargetGroup:        defaultTargetGroup,
+		CloudMapNamespacesMapping: make(map[string]awsservicediscovery.PrivateDnsNamespace, 0),
 	}
 }
 
 func (stack *ECSStack) SetCloudmapDnsNamespace(namespace awsservicediscovery.PrivateDnsNamespace) {
 	stack.CloudMapNamespace = namespace
+}
+func (stack *ECSStack) SetCloudmapDnsNamespacesMapping(mapName string, namespace awsservicediscovery.PrivateDnsNamespace) {
+	stack.CloudMapNamespacesMapping[mapName] = namespace
 }
 
 func CreateECSGeneralRole(stack awscdk.Stack, roleName string, description string) awsiam.Role {
@@ -231,6 +238,13 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 		MemoryMiB:     jsii.String("512"),
 	})
 	envContent := stack.generateMapPointer(env)
+	envContent["AWS_LB_DOMAIN"] = stack.LB.LoadBalancerDnsName()
+	envContent["AWS_VPC_ID"] = stack.Vpc.VpcId()
+	envContent["AWS_ECS_CLUSTER"] = stack.Cluster.ClusterName()
+	envContent["AWS_ECS_TASK_ROLE_ARN"] = stack.Role.RoleArn()
+	envContent["AWS_ECS_TASK_EXEC_ARN"] = stack.Role.RoleArn()
+	envContent["AWS_CM_CLIENT_PRIVATE_DOMAIN"] = stack.CloudMapNamespacesMapping["client"].NamespaceName()
+	envContent["AWS_CM_MANAGEMENT_PRIVATE_DOMAIN"] = stack.CloudMapNamespacesMapping["management"].NamespaceName()
 	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/api-automation-backend:latest"), &awsecs.RepositoryImageProps{})
 	def.AddContainer(jsii.String("api-backend"), &awsecs.ContainerDefinitionOptions{
 		Image:                backendContainer,

@@ -61,7 +61,7 @@ func main() {
 	props.StackName = jsii.String("ServiceDiscoveryStack")
 	serviceDiscoveryStack := servicediscovery.NewServiceDiscovery(rootStack, jsii.String("ServiceDiscoveryStack"), Vpc.Vpc, &props)
 	internalNamespace := serviceDiscoveryStack.NewInternalPrivateDnsNamespace("management.internal", "internal service for core system")
-	/*clientNamespace := */ serviceDiscoveryStack.NewInternalClientDnsNamespace("client.internal", "client service for client system")
+	clientNamespace := serviceDiscoveryStack.NewInternalClientDnsNamespace("client.internal", "client service for client system")
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String("ECSStack")
@@ -69,6 +69,8 @@ func main() {
 	ecsStack.Stack.AddDependency(Vpc.Stack, jsii.String("Waiting for VPCStack update"))
 	ecsStack.Stack.AddDependency(serviceDiscoveryStack.Stack, jsii.String("Waiting for ServiceDiscoveryStack update"))
 	ecsStack.SetCloudmapDnsNamespace(internalNamespace)
+	ecsStack.SetCloudmapDnsNamespacesMapping("management", internalNamespace)
+	ecsStack.SetCloudmapDnsNamespacesMapping("client", clientNamespace)
 	ecsStack.CreateCluster("Preview-ECS-Cluster", Vpc.Vpc)
 
 	// 建立 ECS TaskDefinition
