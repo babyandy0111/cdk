@@ -238,6 +238,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 		MemoryMiB:     jsii.String("512"),
 	})
 	envContent := stack.generateMapPointer(env)
+	// 以下環境變數直接參照 cloudformation 內容，不會設置在 deployment.yaml
 	envContent["AWS_LB_DOMAIN"] = stack.LB.LoadBalancerDnsName()
 	envContent["AWS_VPC_ID"] = stack.Vpc.VpcId()
 	envContent["AWS_ECS_CLUSTER"] = stack.Cluster.ClusterName()
@@ -245,6 +246,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 	envContent["AWS_ECS_TASK_EXEC_ARN"] = stack.Role.RoleArn()
 	envContent["AWS_CM_CLIENT_PRIVATE_DOMAIN"] = stack.CloudMapNamespacesMapping["client"].NamespaceName()
 	envContent["AWS_CM_MANAGEMENT_PRIVATE_DOMAIN"] = stack.CloudMapNamespacesMapping["management"].NamespaceName()
+	envContent["AWS_CLIENT_INTERNAL_DOMAIN_ID"] = stack.CloudMapNamespacesMapping["client"].NamespaceId()
+	envContent["AWS_MANAGEMENT_INTERNAL_DOMAIN_ID"] = stack.CloudMapNamespacesMapping["management"].NamespaceId()
 	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/api-automation-backend:latest"), &awsecs.RepositoryImageProps{})
 	def.AddContainer(jsii.String("api-backend"), &awsecs.ContainerDefinitionOptions{
 		Image:                backendContainer,
