@@ -1,11 +1,11 @@
 package eks
 
 import (
+	stackHelper "github.com/andy-demo/gocdk/libs/stack_helper"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awsec2"
 	"github.com/aws/aws-cdk-go/awscdk/awseks"
 	"github.com/aws/jsii-runtime-go"
-	stackHelper "github.com/faryne/go-cdk-example/libs/stack_helper"
 	"os"
 	"strings"
 )

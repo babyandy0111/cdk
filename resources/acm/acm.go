@@ -1,10 +1,10 @@
 package acm
 
 import (
+	"github.com/andy-demo/gocdk/resources/route53"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awscertificatemanager"
 	"github.com/aws/jsii-runtime-go"
-	"github.com/faryne/go-cdk-example/resources/route53"
 	"os"
 	"strings"
 )

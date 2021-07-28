@@ -23,3 +23,11 @@ cdk.out
 .env
 deployment.yaml
 cdk.context.json
+node_modules/
+
+production-cdk.json
+staging-cdk.jsom
+development-cdk.json
+production.json
+staging.json
+development.json

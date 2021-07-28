@@ -172,7 +172,7 @@ func CreateECSGeneralRole(stack awscdk.Stack, roleName string, description strin
 	return role
 }
 
-func (stack *ECSStack) CreateCluster(name string, vpc awsec2.IVpc) {
+func (stack *ECSStack) CreateCluster(name string, vpc awsec2.IVpc) awsecs.Cluster {
 	resource := awsecs.NewCluster(stack.Stack, jsii.String(name), &awsecs.ClusterProps{
 		ClusterName: jsii.String(name),
 		Vpc:         vpc,
@@ -197,6 +197,12 @@ func (stack *ECSStack) CreateCluster(name string, vpc awsec2.IVpc) {
 			},
 		},
 	)
+	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_CLUSTER_ARN"), &awscdk.CfnOutputProps{
+		Value:       resource.ClusterArn(),
+		Description: jsii.String("Default ECS Cluster ARN"),
+		ExportName:  jsii.String("ECS:CLUSTER:ARN"),
+	})
+	return resource
 }
 
 func (stack *ECSStack) generateMapPointer(env map[string]string) map[string]*string {
@@ -347,6 +353,11 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 		},
 		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
 	})
+	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_BACKEND_SERVICE"), &awscdk.CfnOutputProps{
+		Value:       service.ServiceArn(),
+		Description: jsii.String("Default Backend Service Arn"),
+		ExportName:  jsii.String("ECS:BACKEND:SERVICE"),
+	})
 	// 註冊進targetgroup
 	targetgroup.AddTarget([]awselasticloadbalancingv2.IApplicationLoadBalancerTarget{
 		service,
@@ -483,6 +494,11 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 		},
 		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
 	})
+	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_FRONTEND_SERVICE"), &awscdk.CfnOutputProps{
+		Value:       service.ServiceArn(),
+		Description: jsii.String("Default Frontend Service Arn"),
+		ExportName:  jsii.String("ECS:FRONTEND:SERVICE"),
+	})
 	// 註冊進targetgroup
 	targetgroup.AddTarget([]awselasticloadbalancingv2.IApplicationLoadBalancerTarget{
 		service,
@@ -579,6 +595,11 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(name string, env map[str
 			stack.ContainerSecurityGroup,
 		},
 		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+	})
+	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_APIGATEWAY_SERVICE"), &awscdk.CfnOutputProps{
+		Value:       service.ServiceArn(),
+		Description: jsii.String("Default Apigateway Service Arn"),
+		ExportName:  jsii.String("ECS:APIGATEWAY:SERVICE"),
 	})
 	// 註冊進targetgroup
 	stack.DefaultTargetGroup.AddTarget([]awselasticloadbalancingv2.IApplicationLoadBalancerTarget{

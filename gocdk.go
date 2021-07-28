@@ -2,19 +2,16 @@ package main
 
 import (
 	"fmt"
+	"github.com/andy-demo/gocdk/libs/stack_helper"
+	"github.com/andy-demo/gocdk/resources/acm"
+	"github.com/andy-demo/gocdk/resources/ecs"
+	"github.com/andy-demo/gocdk/resources/servicediscovery"
+	"github.com/andy-demo/gocdk/resources/vpc"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/jsii-runtime-go"
-	"github.com/faryne/go-cdk-example/libs/stack_helper"
-	"github.com/faryne/go-cdk-example/resources/acm"
-	"github.com/faryne/go-cdk-example/resources/ecs"
-	"github.com/faryne/go-cdk-example/resources/eks"
-	"github.com/faryne/go-cdk-example/resources/servicediscovery"
-	"github.com/faryne/go-cdk-example/resources/vpc"
 	"github.com/joho/godotenv"
 	"os"
 )
-
-var envType = os.Getenv("ENVTYPE")
 
 func main() {
 	// 解析 .env 作為部署依據
@@ -42,14 +39,55 @@ func main() {
 
 	// 建立 root stack
 	rootStack := awscdk.NewStack(app, jsii.String("TestPreviewStackRoot"), &props)
+	// 設定部分變數
+	awscdk.NewCfnOutput(rootStack, jsii.String("AWS_ACCESS_KEY"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(os.Getenv("ACCESS_KEY")),
+		Description: jsii.String("Default AWS Access Key"),
+		ExportName:  jsii.String("AWS:ACCESS:KEY"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("AWS_REGION"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(os.Getenv("REGION")),
+		Description: jsii.String("Default AWS Region"),
+		ExportName:  jsii.String("AWS:REGION"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("AWS_SECRET_KEY"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(os.Getenv("SECRET_KEY")),
+		Description: jsii.String("Default AWS Secret Key"),
+		ExportName:  jsii.String("AWS:SECRET:KEY"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("CI_USER_TOKEN"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(os.Getenv("GITHUB_TOKEN")),
+		Description: jsii.String("Default github token"),
+		ExportName:  jsii.String("CI:USER:TOKEN"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("DOCKER_PASSWORD"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(os.Getenv("DOCKER_PASSWORD")),
+		Description: jsii.String("Default Dockerhub password"),
+		ExportName:  jsii.String("DOCKER:PASSWORD"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("DOCKER_USERNAME"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(os.Getenv("DOCKER_USERNAME")),
+		Description: jsii.String("Default Dockerhub username"),
+		ExportName:  jsii.String("DOCKER:USERNAME"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("MYSQL_HOST"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(e["PRIMARY_ECSTASK_ENV"]["DB_HOST"]),
+		Description: jsii.String("Default MySQL HOST"),
+		ExportName:  jsii.String("MYSQL:HOST"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("MYSQL_PASSWORD"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(e["PRIMARY_ECSTASK_ENV"]["DB_PASSWORD"]),
+		Description: jsii.String("Default MySQL Password"),
+		ExportName:  jsii.String("MYSQL:PASSWORD"),
+	})
+	awscdk.NewCfnOutput(rootStack, jsii.String("MYSQL_USER"), &awscdk.CfnOutputProps{
+		Value:       jsii.String(e["PRIMARY_ECSTASK_ENV"]["DB_USER"]),
+		Description: jsii.String("Default MySQL Username"),
+		ExportName:  jsii.String("MYSQL:USER"),
+	})
 	// 建立 VPC Stack
 	props.StackName = jsii.String("VPCStack")
 	Vpc := vpc.Init(rootStack, jsii.String("VPCStack"), &props)
-
-	// 建立 EKS Stack
-	props.StackName = jsii.String("EKSStack")
-	eksStack := eks.Init(rootStack, jsii.String("EKSStack"), &props, Vpc.Vpc)
-	eksStack.Stack.AddDependency(Vpc.Stack, jsii.String("Waiting for VPCStack Done"))
 
 	// 建立 ACM Stack
 	props.StackName = jsii.String("ACMStack")

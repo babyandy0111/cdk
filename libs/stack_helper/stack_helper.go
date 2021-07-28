@@ -2,6 +2,7 @@ package stack_helper
 
 import (
 	"github.com/aws/aws-cdk-go/awscdk"
+	"os"
 )
 
 type ResourceCallback func(*MyCDKStack, []awscdk.Resource) awscdk.Resource
@@ -29,6 +30,10 @@ type MyCDKStack struct {
 	OutputResources   map[string]*string
 	StackDependencies map[string]*MyCDKStack
 	MyCDKStackInterface
+}
+
+func GetEnv() string {
+	return os.Getenv("ENVTYPE")
 }
 
 func New(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) *MyCDKStack {
