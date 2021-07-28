@@ -34,7 +34,7 @@ function encryptedValue (key, value) {
 
 
 // 可以操作的 repository
-let usedRepos = ["api-automation-backend", "grpc-server", "apigateway"];
+let usedRepos = ["api-automation-backend", "grpc-server", "apigateway", "api-automation-frontend"];
 // 初始化 github
 const github = new Octokit({auth: process.env.GITHUB_TOKEN})
 
@@ -56,38 +56,21 @@ fs.readFile(filename, "utf8", (err, data) => {;
                 continue;
             }
             console.log("getting repo info:: >>  id: " + d.id + "; name: " + d.name);
-            let createEnvUrl = "/repos/" + process.env.GITHUB_ORGANIZATION + "/" + d.name + "/environments/" + githubEnvName;
-            console.log(createEnvUrl);
-            let getPublicKeyUrl = "/repositories/"+d.id+"/environments/" + githubEnvName + "/secrets/public-key";
-            // 建立環境
-            github.request("PUT " + createEnvUrl, {
-                deployment_branch_policy: {
-                    protected_branches: false,
-                    custom_branch_policies: true,
+            // private repo 非付費帳號無法使用 environment 等功能......
+            // 所以改使用 repo secrets
+            let repoPublicKeyUrl = "/repos/" + process.env.GITHUB_ORGANIZATION  + "/" + d.name + "/actions/secrets/public-key";
+            github.request("GET "+repoPublicKeyUrl).then(obj => {
+                for (let j in input) {
+                    //
+                    let createRepoSecretUrl = "/repos/" + process.env.GITHUB_ORGANIZATION + "/" + d.name + "/actions/secrets/" + j;
+                    github.request("PUT "+createRepoSecretUrl, {
+                        encrypted_value: encryptedValue(obj.data.key, input[j]),
+                        key_id: obj.data.key_id,
+                    }).catch(err => {
+                        throw err;
+                    })
                 }
-            }).then(objEnv => {
-                console.log("environment created / updated: " + objEnv.data.name);
-                // 取得該 repository 下指定環境的 publickey
-                github.request("GET " + getPublicKeyUrl).then(obj => {
-                    console.log("get repo environment public_key:: >> id: " + d.id + "; name: " + d.name + "; public_key: " + obj.data.key);
-                    // 開始寫入環境變數
-                    for (let j in input) {
-                        github.request("PUT /repositories/"+d.id+"/environments/" + githubEnvName +"/secrets/" + j, {
-                            repository_id: d.id,
-                            environment_name: githubEnvName,
-                            secret_name: j,
-                            encrypted_value: encryptedValue(obj.data.key, input[j]),
-                            key_id: obj.data.key_id,
-                        }).catch(err => {
-                            console.log(err);
-                        })
-                    }
-                }).catch(err => {
-                    console.log("AAAA");
-                    throw err;
-                })
             }).catch(err => {
-                console.log("BBBB");
                 throw err;
             });
         }
