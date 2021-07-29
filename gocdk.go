@@ -34,11 +34,11 @@ func main() {
 			Account: jsii.String(accountId),
 			Region:  jsii.String(region),
 		},
-		StackName: jsii.String("TestPreviewStackRoot"),
+		StackName: jsii.String(stack_helper.GenerateNameForResource("RootStack")),
 	}
 
 	// 建立 root stack
-	rootStack := awscdk.NewStack(app, jsii.String("TestPreviewStackRoot"), &props)
+	rootStack := awscdk.NewStack(app, jsii.String(stack_helper.GenerateNameForResource("RootStack")), &props)
 	// 設定部分變數
 	awscdk.NewCfnOutput(rootStack, jsii.String("AWS_ACCESS_KEY"), &awscdk.CfnOutputProps{
 		Value:       jsii.String(os.Getenv("ACCESS_KEY")),
@@ -86,35 +86,37 @@ func main() {
 		ExportName:  jsii.String("MYSQL:USER"),
 	})
 	// 建立 VPC Stack
-	props.StackName = jsii.String("VPCStack")
-	Vpc := vpc.Init(rootStack, jsii.String("VPCStack"), &props)
+	props.StackName = jsii.String(stack_helper.GenerateNameForResource("VPCStack"))
+	Vpc := vpc.Init(rootStack, jsii.String(stack_helper.GenerateNameForResource("VPCStack")), &props)
 
 	// 建立 ACM Stack
-	props.StackName = jsii.String("ACMStack")
-	acmStack, acmResource := acm.NewACM(rootStack, jsii.String("ACMStack"), &props)
+	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ACMStack"))
+	acmStack, acmResource := acm.NewACM(rootStack, jsii.String(stack_helper.GenerateNameForResource("ACMStack")), &props)
 	fmt.Println(*acmStack.StackName())
 	fmt.Println(*acmResource.CertificateArn())
 
 	// 建立 cloudmap 相關服務（for service discovery）
-	props.StackName = jsii.String("ServiceDiscoveryStack")
-	serviceDiscoveryStack := servicediscovery.NewServiceDiscovery(rootStack, jsii.String("ServiceDiscoveryStack"), Vpc.Vpc, &props)
-	internalNamespace := serviceDiscoveryStack.NewInternalPrivateDnsNamespace("management.internal", "internal service for core system")
-	clientNamespace := serviceDiscoveryStack.NewInternalClientDnsNamespace("client.internal", "client service for client system")
+	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ServiceDiscoveryStack"))
+	serviceDiscoveryStack := servicediscovery.NewServiceDiscovery(rootStack, jsii.String(stack_helper.GenerateNameForResource("ServiceDiscoveryStack")), Vpc.Vpc, &props)
+	internalDomain := fmt.Sprintf("%s.management.internal", stack_helper.GetEnv())
+	clientDomain := fmt.Sprintf("%s.client.internal", stack_helper.GetEnv())
+	internalNamespace := serviceDiscoveryStack.NewInternalPrivateDnsNamespace(internalDomain, "internal service for core system")
+	clientNamespace := serviceDiscoveryStack.NewInternalClientDnsNamespace(clientDomain, "client service for client system")
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
-	props.StackName = jsii.String("ECSStack")
-	ecsStack := ecs.NewECS(rootStack, jsii.String("ECSStack"), Vpc.Vpc, acmResource, &props)
+	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ECSStack"))
+	ecsStack := ecs.NewECS(rootStack, jsii.String(stack_helper.GenerateNameForResource("ECSStack")), Vpc.Vpc, acmResource, &props)
 	ecsStack.Stack.AddDependency(Vpc.Stack, jsii.String("Waiting for VPCStack update"))
 	ecsStack.Stack.AddDependency(serviceDiscoveryStack.Stack, jsii.String("Waiting for ServiceDiscoveryStack update"))
 	ecsStack.SetCloudmapDnsNamespace(internalNamespace)
 	ecsStack.SetCloudmapDnsNamespacesMapping("management", internalNamespace)
 	ecsStack.SetCloudmapDnsNamespacesMapping("client", clientNamespace)
-	ecsStack.CreateCluster("Preview-ECS-Cluster", Vpc.Vpc)
+	cluster := ecsStack.CreateCluster(stack_helper.GenerateNameForResource("ECS-Cluster"), Vpc.Vpc)
 
 	// 建立 ECS TaskDefinition
-	ecsStack.RegisterTaskDefinitionAPIManagementBackend("preview-api-man-backend", e["PRIMARY_ECSTASK_ENV"])
-	ecsStack.RegisterTaskDefinitionAPIManagementFrontend("preview-api-man-frontend")
-	ecsStack.RegisterTaskDefinitionAPIGateway("preview-api-man-apigateway", e["APIGATEWAY_ECSTASK_ENV"])
+	ecsStack.RegisterTaskDefinitionAPIManagementBackend(stack_helper.GenerateNameForResource("api-main-backend"), cluster, e["PRIMARY_ECSTASK_ENV"])
+	ecsStack.RegisterTaskDefinitionAPIManagementFrontend(cluster)
+	ecsStack.RegisterTaskDefinitionAPIGateway(cluster, e["APIGATEWAY_ECSTASK_ENV"])
 
 	app.Synth(nil)
 }

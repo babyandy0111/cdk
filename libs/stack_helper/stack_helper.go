@@ -1,6 +1,7 @@
 package stack_helper
 
 import (
+	"fmt"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"os"
 )
@@ -34,6 +35,14 @@ type MyCDKStack struct {
 
 func GetEnv() string {
 	return os.Getenv("ENVTYPE")
+}
+func GetShortEnv() string {
+	str := GetEnv()
+	return str[0:4]
+}
+
+func GenerateNameForResource(resource string) string {
+	return fmt.Sprintf("%s-%s", GetShortEnv(), resource)
 }
 
 func New(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) *MyCDKStack {

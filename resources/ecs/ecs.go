@@ -2,6 +2,7 @@ package ecs
 
 import (
 	"fmt"
+	"github.com/andy-demo/gocdk/libs/stack_helper"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awscertificatemanager"
 	"github.com/aws/aws-cdk-go/awscdk/awsec2"
@@ -9,6 +10,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/awselasticloadbalancingv2"
 	"github.com/aws/aws-cdk-go/awscdk/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/awslogs"
+	"github.com/aws/aws-cdk-go/awscdk/awsroute53"
 	"github.com/aws/aws-cdk-go/awscdk/awsservicediscovery"
 	"github.com/aws/jsii-runtime-go"
 	"os"
@@ -27,28 +29,29 @@ type ECSStack struct {
 	Listener443               awselasticloadbalancingv2.ApplicationListener
 	DefaultTargetGroup        awselasticloadbalancingv2.ApplicationTargetGroup
 	CloudMapNamespacesMapping map[string]awsservicediscovery.PrivateDnsNamespace
+	HostedZone                awsroute53.IHostedZone
 }
 
 func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert awscertificatemanager.Certificate, props *awscdk.StackProps) *ECSStack {
 	stack := awscdk.NewStack(parentStack, stackName, props)
 	// 建立 ECS 專用 Role
-	role := CreateECSGeneralRole(stack, "preview-general-role", "General Role For ECS Task")
+	role := CreateECSGeneralRole(stack, "ecsrole", "General Role For ECS Task")
 	// 建立專用 SecurityGroup for loadbalancer
-	sg := awsec2.NewSecurityGroup(stack, jsii.String("preview-api-man-sg"), &awsec2.SecurityGroupProps{
+	sg := awsec2.NewSecurityGroup(stack, jsii.String(stack_helper.GenerateNameForResource("api-main-sg")), &awsec2.SecurityGroupProps{
 		Vpc:               vpc,
 		AllowAllOutbound:  jsii.Bool(true),
 		Description:       jsii.String("Main Load Balancer For Service"),
-		SecurityGroupName: jsii.String("preview-api-lb-sg"),
+		SecurityGroupName: jsii.String(stack_helper.GenerateNameForResource("api-lb-sg")),
 	})
 	sg.AddIngressRule(awsec2.Peer_AnyIpv4(), awsec2.Port_Tcp(jsii.Number(80)), jsii.String("HTTP Entry"), jsii.Bool(false))
 	sg.AddIngressRule(awsec2.Peer_AnyIpv4(), awsec2.Port_Tcp(jsii.Number(443)), jsii.String("HTTPS Entry"), jsii.Bool(false))
 
 	// 建立security group for ecs container
-	containerSG := awsec2.NewSecurityGroup(stack, jsii.String("preview-api-container-sg"), &awsec2.SecurityGroupProps{
+	containerSG := awsec2.NewSecurityGroup(stack, jsii.String(stack_helper.GenerateNameForResource("api-container-sg")), &awsec2.SecurityGroupProps{
 		Vpc:               vpc,
 		AllowAllOutbound:  jsii.Bool(true),
 		Description:       jsii.String("Default Security Group For ECS Container"),
-		SecurityGroupName: jsii.String("preview-api-container-sg"),
+		SecurityGroupName: jsii.String(stack_helper.GenerateNameForResource("api-container-sg")),
 	})
 	containerSG.AddIngressRule(awsec2.Peer_Ipv4(jsii.String("10.0.0.0/8")), awsec2.Port_Tcp(jsii.Number(80)), jsii.String("For HTTP Frontend"), jsii.Bool(false))
 	containerSG.AddIngressRule(awsec2.Peer_Ipv4(jsii.String("10.0.0.0/8")), awsec2.Port_Tcp(jsii.Number(5001)), jsii.String("For GRPC Webpackager"), jsii.Bool(false))
@@ -56,12 +59,17 @@ func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert aw
 	containerSG.AddIngressRule(awsec2.Peer_Ipv4(jsii.String("10.0.0.0/8")), awsec2.Port_Tcp(jsii.Number(8080)), jsii.String("For HTTP Backend"), jsii.Bool(false))
 	awscdk.Tags_Of(containerSG).Add(jsii.String(os.Getenv("TAG_ENVTYPE_NAME")), jsii.String(os.Getenv("ENVTYPE")), &awscdk.TagProps{})
 	awscdk.Tags_Of(containerSG).Add(jsii.String(os.Getenv("TAG_SERVICETYPE_NAME")), jsii.String("CONTAINER_SECURITY_GROUP"), &awscdk.TagProps{})
+
+	// 找出主Domain資訊
+	domain := awsroute53.PublicHostedZone_FromLookup(stack, jsii.String(stack_helper.GenerateNameForResource("FindHostedZone")), &awsroute53.HostedZoneProviderProps{
+		DomainName: jsii.String(os.Getenv("ACM_MAIN_DOMAIN")),
+	})
 	// 建立專用 Application Load Balancer
-	lb := awselasticloadbalancingv2.NewApplicationLoadBalancer(stack, jsii.String("preview-api-main-lb"), &awselasticloadbalancingv2.ApplicationLoadBalancerProps{
+	lb := awselasticloadbalancingv2.NewApplicationLoadBalancer(stack, jsii.String(stack_helper.GenerateNameForResource("api-main-lb")), &awselasticloadbalancingv2.ApplicationLoadBalancerProps{
 		Vpc:                vpc,
 		DeletionProtection: jsii.Bool(false),
 		InternetFacing:     jsii.Bool(true),
-		LoadBalancerName:   jsii.String("preview-api-main-lb"),
+		LoadBalancerName:   jsii.String(stack_helper.GenerateNameForResource("api-main-lb")),
 		Http2Enabled:       jsii.Bool(true),
 		IdleTimeout:        awscdk.Duration_Seconds(jsii.Number(60)),
 		IpAddressType:      awselasticloadbalancingv2.IpAddressType_IPV4,
@@ -71,7 +79,7 @@ func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert aw
 	awscdk.Tags_Of(lb).Add(jsii.String(os.Getenv("TAG_ENVTYPE_NAME")), jsii.String(os.Getenv("ENVTYPE")), &awscdk.TagProps{})
 	awscdk.Tags_Of(lb).Add(jsii.String(os.Getenv("TAG_SERVICETYPE_NAME")), jsii.String("LOADBALANCER"), &awscdk.TagProps{})
 	// 建立預設 TargetGroup ，只要不符合規則的都丟進這裡
-	defaultTargetGroup := awselasticloadbalancingv2.NewApplicationTargetGroup(stack, jsii.String("preview-main-apigateway"), &awselasticloadbalancingv2.ApplicationTargetGroupProps{
+	defaultTargetGroup := awselasticloadbalancingv2.NewApplicationTargetGroup(stack, jsii.String(stack_helper.GenerateNameForResource("main-apigateway")), &awselasticloadbalancingv2.ApplicationTargetGroupProps{
 		DeregistrationDelay: awscdk.Duration_Seconds(jsii.Number(10)),
 		HealthCheck: &awselasticloadbalancingv2.HealthCheck{
 			Enabled:                 jsii.Bool(true),
@@ -84,7 +92,7 @@ func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert aw
 			Timeout:                 awscdk.Duration_Seconds(jsii.Number(7)),
 			UnhealthyThresholdCount: jsii.Number(3),
 		},
-		TargetGroupName: jsii.String("preview-main-apigateway"),
+		TargetGroupName: jsii.String(stack_helper.GenerateNameForResource("main-apigateway")),
 		TargetType:      awselasticloadbalancingv2.TargetType_IP,
 		Vpc:             vpc,
 		Port:            jsii.Number(8080),
@@ -127,6 +135,7 @@ func NewECS(parentStack awscdk.Stack, stackName *string, vpc awsec2.Vpc, cert aw
 		Listener443:               listener443,
 		DefaultTargetGroup:        defaultTargetGroup,
 		CloudMapNamespacesMapping: make(map[string]awsservicediscovery.PrivateDnsNamespace, 0),
+		HostedZone:                domain,
 	}
 }
 
@@ -138,7 +147,7 @@ func (stack *ECSStack) SetCloudmapDnsNamespacesMapping(mapName string, namespace
 }
 
 func CreateECSGeneralRole(stack awscdk.Stack, roleName string, description string) awsiam.Role {
-	role := awsiam.NewRole(stack, jsii.String("roleName"), &awsiam.RoleProps{
+	role := awsiam.NewRole(stack, jsii.String(stack_helper.GenerateNameForResource(roleName)), &awsiam.RoleProps{
 		AssumedBy:   awsiam.NewServicePrincipal(jsii.String("ecs-tasks.amazonaws.com"), &awsiam.ServicePrincipalOpts{}),
 		Description: jsii.String(description),
 		InlinePolicies: &map[string]awsiam.PolicyDocument{
@@ -161,7 +170,7 @@ func CreateECSGeneralRole(stack awscdk.Stack, roleName string, description strin
 						Resources: &[]*string{
 							jsii.String("*"),
 						},
-						Sid: jsii.String("PreviewEcsRole"),
+						Sid: jsii.String(stack_helper.GetEnv() + roleName + "Policy"),
 					}),
 				},
 			}),
@@ -216,9 +225,10 @@ func (stack *ECSStack) generateMapPointer(env map[string]string) map[string]*str
 }
 
 // 設定 Backend 所使用的Task Definition
-func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, env map[string]string) awsecs.TaskDefinition {
-	backendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-backend-api"), &awslogs.LogGroupProps{
-		LogGroupName:  jsii.String("preview-backend-api"),
+func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, cluster awsecs.Cluster, env map[string]string) awsecs.TaskDefinition {
+	stack_helper.GenerateNameForResource("backend")
+	backendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-api")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("backend-api")),
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 		Retention:     awslogs.RetentionDays_ONE_MONTH,
 	})
@@ -226,8 +236,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 		StreamPrefix: jsii.String("log-message-"),
 		LogGroup:     backendLogGroup,
 	})
-	redisLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-backend-redis"), &awslogs.LogGroupProps{
-		LogGroupName:  jsii.String("preview-backend-redis"),
+	redisLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-redis")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("backend-redis")),
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 		Retention:     awslogs.RetentionDays_ONE_MONTH,
 	})
@@ -254,6 +264,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 	envContent["AWS_CM_MANAGEMENT_PRIVATE_DOMAIN"] = stack.CloudMapNamespacesMapping["management"].NamespaceName()
 	envContent["AWS_CLIENT_INTERNAL_DOMAIN_ID"] = stack.CloudMapNamespacesMapping["client"].NamespaceId()
 	envContent["AWS_MANAGEMENT_INTERNAL_DOMAIN_ID"] = stack.CloudMapNamespacesMapping["management"].NamespaceId()
+	envContent["AWS_MAIN_DOMAIN"] = jsii.String(os.Getenv("ACM_MAIN_DOMAIN"))
 	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/api-automation-backend:latest"), &awsecs.RepositoryImageProps{})
 	def.AddContainer(jsii.String("api-backend"), &awsecs.ContainerDefinitionOptions{
 		Image:                backendContainer,
@@ -296,7 +307,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 	})
 
 	// 建立 TargetGroup
-	targetgroup := awselasticloadbalancingv2.NewApplicationTargetGroup(stack.Stack, jsii.String("api-backend-targetgroup"), &awselasticloadbalancingv2.ApplicationTargetGroupProps{
+	targetgroup := awselasticloadbalancingv2.NewApplicationTargetGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("api-backend-targetgroup")), &awselasticloadbalancingv2.ApplicationTargetGroupProps{
 		DeregistrationDelay: awscdk.Duration_Seconds(jsii.Number(10)),
 		HealthCheck: &awselasticloadbalancingv2.HealthCheck{
 			Enabled:                 jsii.Bool(true),
@@ -309,19 +320,24 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 			Timeout:                 awscdk.Duration_Seconds(jsii.Number(7)),
 			UnhealthyThresholdCount: jsii.Number(3),
 		},
-		TargetGroupName: jsii.String("preview-main-backend"),
+		TargetGroupName: jsii.String(stack_helper.GenerateNameForResource("api-backend-targetgroup")),
 		TargetType:      awselasticloadbalancingv2.TargetType_IP,
 		Vpc:             stack.Vpc,
 		Port:            jsii.Number(8080),
 		Protocol:        awselasticloadbalancingv2.ApplicationProtocol_HTTP,
 		ProtocolVersion: awselasticloadbalancingv2.ApplicationProtocolVersion_HTTP1,
 	})
+	domainRule := fmt.Sprintf("%s.my-api.%s", stack_helper.GetShortEnv(), os.Getenv("ACM_MAIN_DOMAIN"))
+	if stack_helper.GetEnv() == "production" {
+		domainRule = fmt.Sprintf("my-api.%s", os.Getenv("ACM_MAIN_DOMAIN"))
+	}
+	// 建立 domain
 	// 建立 ListenerRule
-	awselasticloadbalancingv2.NewApplicationListenerRule(stack.Stack, jsii.String("api-backend-listenerrule"), &awselasticloadbalancingv2.ApplicationListenerRuleProps{
+	awselasticloadbalancingv2.NewApplicationListenerRule(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("api-backend-listenerrule")), &awselasticloadbalancingv2.ApplicationListenerRuleProps{
 		Priority: jsii.Number(1),
 		Conditions: &[]awselasticloadbalancingv2.ListenerCondition{
 			awselasticloadbalancingv2.ListenerCondition_HostHeaders(&[]*string{
-				jsii.String(fmt.Sprintf("my-api.%s", os.Getenv("ACM_MAIN_DOMAIN"))),
+				jsii.String(domainRule),
 			}),
 		},
 		TargetGroups: &[]awselasticloadbalancingv2.IApplicationTargetGroup{
@@ -331,8 +347,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 	})
 
 	// 建立 Service
-	service := awsecs.NewFargateService(stack.Stack, jsii.String("preview-ecs-backend"), &awsecs.FargateServiceProps{
-		Cluster: stack.Cluster,
+	service := awsecs.NewFargateService(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("ecs-backend")), &awsecs.FargateServiceProps{
+		Cluster: cluster,
 		CloudMapOptions: &awsecs.CloudMapOptions{
 			CloudMapNamespace: stack.CloudMapNamespace,
 			Container:         redisContainer,
@@ -345,7 +361,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 		HealthCheckGracePeriod: awscdk.Duration_Seconds(jsii.Number(10)),
 		MaxHealthyPercent:      jsii.Number(200),
 		MinHealthyPercent:      jsii.Number(100),
-		ServiceName:            jsii.String("preview-api-backend"),
+		ServiceName:            jsii.String(stack_helper.GenerateNameForResource("ecs-backend")),
 		TaskDefinition:         def,
 		AssignPublicIp:         jsii.Bool(false),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
@@ -365,9 +381,10 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, e
 
 	return def
 }
-func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) awsecs.TaskDefinition {
-	frontendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-frontend-api"), &awslogs.LogGroupProps{
-		LogGroupName:  jsii.String("preview-frontend-api"),
+func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(cluster awsecs.Cluster) awsecs.TaskDefinition {
+	name := stack_helper.GenerateNameForResource("frontend")
+	frontendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("frontend-api")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("frontend-api")),
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 		Retention:     awslogs.RetentionDays_ONE_MONTH,
 	})
@@ -375,8 +392,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 		StreamPrefix: jsii.String("log-message-"),
 		LogGroup:     frontendLogGroup,
 	})
-	webpushPackagerLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-webpush-packager"), &awslogs.LogGroupProps{
-		LogGroupName:  jsii.String("preview-webpush-packager"),
+	webpushPackagerLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("webpush-packager")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("webpush-packager")),
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 		Retention:     awslogs.RetentionDays_ONE_MONTH,
 	})
@@ -437,7 +454,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 	})
 
 	// 建立 TargetGroup
-	targetgroup := awselasticloadbalancingv2.NewApplicationTargetGroup(stack.Stack, jsii.String("api-frontend-targetgroup"), &awselasticloadbalancingv2.ApplicationTargetGroupProps{
+	targetgroup := awselasticloadbalancingv2.NewApplicationTargetGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("api-frontend-targetgroup")), &awselasticloadbalancingv2.ApplicationTargetGroupProps{
 		DeregistrationDelay: awscdk.Duration_Seconds(jsii.Number(10)),
 		HealthCheck: &awselasticloadbalancingv2.HealthCheck{
 			Enabled:                 jsii.Bool(true),
@@ -450,7 +467,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 			Timeout:                 awscdk.Duration_Seconds(jsii.Number(3)),
 			UnhealthyThresholdCount: jsii.Number(3),
 		},
-		TargetGroupName: jsii.String("preview-main-frontend"),
+		TargetGroupName: jsii.String(stack_helper.GenerateNameForResource("main-frontend")),
 		TargetType:      awselasticloadbalancingv2.TargetType_IP,
 		Vpc:             stack.Vpc,
 		Port:            jsii.Number(80),
@@ -458,11 +475,15 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 		ProtocolVersion: awselasticloadbalancingv2.ApplicationProtocolVersion_HTTP1,
 	})
 	// 建立 ListenerRule
-	awselasticloadbalancingv2.NewApplicationListenerRule(stack.Stack, jsii.String("api-frontend-listenerrule"), &awselasticloadbalancingv2.ApplicationListenerRuleProps{
+	domainRule := fmt.Sprintf("%s.my-api-management.%s", stack_helper.GetShortEnv(), os.Getenv("ACM_MAIN_DOMAIN"))
+	if stack_helper.GetEnv() == "production" {
+		domainRule = fmt.Sprintf("my-api-management.%s", os.Getenv("ACM_MAIN_DOMAIN"))
+	}
+	awselasticloadbalancingv2.NewApplicationListenerRule(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("api-frontend-listenerrule")), &awselasticloadbalancingv2.ApplicationListenerRuleProps{
 		Priority: jsii.Number(2),
 		Conditions: &[]awselasticloadbalancingv2.ListenerCondition{
 			awselasticloadbalancingv2.ListenerCondition_HostHeaders(&[]*string{
-				jsii.String(fmt.Sprintf("my-api-management.%s", os.Getenv("ACM_MAIN_DOMAIN"))),
+				jsii.String(domainRule),
 			}),
 		},
 		TargetGroups: &[]awselasticloadbalancingv2.IApplicationTargetGroup{
@@ -472,8 +493,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 	})
 
 	// 建立 ECS Service
-	service := awsecs.NewFargateService(stack.Stack, jsii.String("preview-ecs-frontend"), &awsecs.FargateServiceProps{
-		Cluster: stack.Cluster,
+	service := awsecs.NewFargateService(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("ecs-frontend")), &awsecs.FargateServiceProps{
+		Cluster: cluster,
 		CloudMapOptions: &awsecs.CloudMapOptions{
 			CloudMapNamespace: stack.CloudMapNamespace,
 			Container:         webpushContainer,
@@ -486,7 +507,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 		HealthCheckGracePeriod: awscdk.Duration_Seconds(jsii.Number(10)),
 		MaxHealthyPercent:      jsii.Number(200),
 		MinHealthyPercent:      jsii.Number(100),
-		ServiceName:            jsii.String("preview-api-frontend"),
+		ServiceName:            jsii.String(stack_helper.GenerateNameForResource("ecs-frontend")),
 		TaskDefinition:         def,
 		AssignPublicIp:         jsii.Bool(false),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
@@ -505,9 +526,10 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(name string) 
 	}...)
 	return def
 }
-func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(name string, env map[string]string) awsecs.TaskDefinition {
-	apigatewayLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-backend-apigateway"), &awslogs.LogGroupProps{
-		LogGroupName:  jsii.String("preview-backend-apigateway"),
+func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, env map[string]string) awsecs.TaskDefinition {
+	name := stack_helper.GenerateNameForResource("apigateway")
+	apigatewayLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-apigateway")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("backend-apigateway")),
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 		Retention:     awslogs.RetentionDays_ONE_MONTH,
 	})
@@ -515,8 +537,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(name string, env map[str
 		StreamPrefix: jsii.String("log-message-"),
 		LogGroup:     apigatewayLogGroup,
 	})
-	redisLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String("preview-apigateway-redis"), &awslogs.LogGroupProps{
-		LogGroupName:  jsii.String("preview-apigateway-redis"),
+	redisLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("apigateway-redis")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("apigateway-redis")),
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 		Retention:     awslogs.RetentionDays_ONE_MONTH,
 	})
@@ -574,8 +596,8 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(name string, env map[str
 		StopTimeout:  awscdk.Duration_Seconds(jsii.Number(10)),
 	})
 	// 建立 Service
-	service := awsecs.NewFargateService(stack.Stack, jsii.String("preview-ecs-apigateway"), &awsecs.FargateServiceProps{
-		Cluster: stack.Cluster,
+	service := awsecs.NewFargateService(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("ecs-apigateway")), &awsecs.FargateServiceProps{
+		Cluster: cluster,
 		CloudMapOptions: &awsecs.CloudMapOptions{
 			CloudMapNamespace: stack.CloudMapNamespace,
 			Container:         redisContainer,
@@ -588,7 +610,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(name string, env map[str
 		HealthCheckGracePeriod: awscdk.Duration_Seconds(jsii.Number(10)),
 		MaxHealthyPercent:      jsii.Number(200),
 		MinHealthyPercent:      jsii.Number(100),
-		ServiceName:            jsii.String("preview-apigateway"),
+		ServiceName:            jsii.String(stack_helper.GenerateNameForResource("apigateway")),
 		TaskDefinition:         def,
 		AssignPublicIp:         jsii.Bool(false),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
