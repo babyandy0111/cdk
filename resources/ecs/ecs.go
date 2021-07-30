@@ -327,11 +327,18 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, c
 		Protocol:        awselasticloadbalancingv2.ApplicationProtocol_HTTP,
 		ProtocolVersion: awselasticloadbalancingv2.ApplicationProtocolVersion_HTTP1,
 	})
-	domainRule := fmt.Sprintf("%s.my-api.%s", stack_helper.GetShortEnv(), os.Getenv("ACM_MAIN_DOMAIN"))
+	domainRule := fmt.Sprintf("%s.app-api.%s", stack_helper.GetShortEnv(), os.Getenv("ACM_MAIN_DOMAIN"))
 	if stack_helper.GetEnv() == "production" {
-		domainRule = fmt.Sprintf("my-api.%s", os.Getenv("ACM_MAIN_DOMAIN"))
+		domainRule = fmt.Sprintf("app-api.%s", os.Getenv("ACM_MAIN_DOMAIN"))
 	}
 	// 建立 domain
+	awsroute53.NewCnameRecord(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-domain")), &awsroute53.CnameRecordProps{
+		Zone:       stack.HostedZone,
+		Comment:    jsii.String(fmt.Sprintf("%s API Backend Domain", stack_helper.GetEnv())),
+		RecordName: jsii.String(domainRule),
+		Ttl:        awscdk.Duration_Seconds(jsii.Number(300)),
+		DomainName: stack.LB.LoadBalancerDnsName(),
+	})
 	// 建立 ListenerRule
 	awselasticloadbalancingv2.NewApplicationListenerRule(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("api-backend-listenerrule")), &awselasticloadbalancingv2.ApplicationListenerRuleProps{
 		Priority: jsii.Number(1),
@@ -475,10 +482,18 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(cluster awsec
 		ProtocolVersion: awselasticloadbalancingv2.ApplicationProtocolVersion_HTTP1,
 	})
 	// 建立 ListenerRule
-	domainRule := fmt.Sprintf("%s.my-api-management.%s", stack_helper.GetShortEnv(), os.Getenv("ACM_MAIN_DOMAIN"))
+	domainRule := fmt.Sprintf("%s.app.%s", stack_helper.GetShortEnv(), os.Getenv("ACM_MAIN_DOMAIN"))
 	if stack_helper.GetEnv() == "production" {
-		domainRule = fmt.Sprintf("my-api-management.%s", os.Getenv("ACM_MAIN_DOMAIN"))
+		domainRule = fmt.Sprintf("app.%s", os.Getenv("ACM_MAIN_DOMAIN"))
 	}
+	//建立 domain
+	awsroute53.NewCnameRecord(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("frontend-domain")), &awsroute53.CnameRecordProps{
+		Zone:       stack.HostedZone,
+		Comment:    jsii.String(fmt.Sprintf("%s API Frontend Domain", stack_helper.GetEnv())),
+		RecordName: jsii.String(domainRule),
+		Ttl:        awscdk.Duration_Seconds(jsii.Number(300)),
+		DomainName: stack.LB.LoadBalancerDnsName(),
+	})
 	awselasticloadbalancingv2.NewApplicationListenerRule(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("api-frontend-listenerrule")), &awselasticloadbalancingv2.ApplicationListenerRuleProps{
 		Priority: jsii.Number(2),
 		Conditions: &[]awselasticloadbalancingv2.ListenerCondition{

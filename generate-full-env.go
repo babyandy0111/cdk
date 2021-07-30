@@ -29,6 +29,7 @@ func main() {
 }
 
 func generateGithubJson(envType string) error {
+	shortEnvName := envType[0:4]
 	originFilename := fmt.Sprintf(os.Getenv("PWD")+"/%s-cdk.json", envType)
 	destFileName := fmt.Sprintf(os.Getenv("PWD")+"/%s.json", envType)
 	// 讀取 CDK 匯出來的內容
@@ -51,17 +52,17 @@ func generateGithubJson(envType string) error {
 	}
 	// 產生要準備匯至github的環境變數內容
 	j2 := make(map[string]string, 0)
-	c := j1["TestPreviewStackRoot"]
+	c := j1[shortEnvName+"-RootStack"]
 	j2["AWS_ACCESS_KEY"] = c["AWSACCESSKEY"]
 	j2["AWS_REGION"] = c["AWSREGION"]
 	j2["AWS_SECRET_KEY"] = c["AWSSECRETKEY"]
 	j2["DOCKER_PASSWORD"] = c["DOCKERPASSWORD"]
 	j2["CI_USER_TOKEN"] = c["CIUSERTOKEN"]
 	j2["DOCKER_USERNAME"] = c["DOCKERUSERNAME"]
-	j2["ECS_APIGATEWAY_SERVICE"] = j1["ECSStack"]["ECSAPIGATEWAYSERVICE"]
-	j2["ECS_BACKEND_SERVICE"] = j1["ECSStack"]["ECSBACKENDSERVICE"]
-	j2["ECS_CLUSTER"] = j1["ECSStack"]["ECSCLUSTERARN"]
-	j2["ECS_FRONTEND_SERVICE"] = j1["ECSStack"]["ECSFRONTENDSERVICE"]
+	j2["ECS_APIGATEWAY_SERVICE"] = j1[shortEnvName+"-ECSStack"]["ECSAPIGATEWAYSERVICE"]
+	j2["ECS_BACKEND_SERVICE"] = j1[shortEnvName+"-ECSStack"]["ECSBACKENDSERVICE"]
+	j2["ECS_CLUSTER"] = j1[shortEnvName+"-ECSStack"]["ECSCLUSTERARN"]
+	j2["ECS_FRONTEND_SERVICE"] = j1[shortEnvName+"-ECSStack"]["ECSFRONTENDSERVICE"]
 	j2["MYSQL_HOST"] = c["MYSQLHOST"]
 	j2["MYSQL_PASSWORD"] = c["MYSQLPASSWORD"]
 	j2["MYSQL_USER"] = c["MYSQLUSER"]
