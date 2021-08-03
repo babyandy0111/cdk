@@ -645,3 +645,75 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, 
 
 	return def
 }
+func (stack *ECSStack) RegisterTaskDefinitionFixedMySQLGrpcService(cluster awsecs.Cluster) awsecs.TaskDefinition {
+	backendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("grpc-mysql")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("grpc-mysql")),
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+		Retention:     awslogs.RetentionDays_ONE_MONTH,
+	})
+	backendLogDriver := awsecs.NewAwsLogDriver(&awsecs.AwsLogDriverProps{
+		StreamPrefix: jsii.String("log-message-"),
+		LogGroup:     backendLogGroup,
+	})
+	def := awsecs.NewTaskDefinition(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("grpc-database-def")), &awsecs.TaskDefinitionProps{
+		ExecutionRole: stack.Role,
+		Family:        jsii.String("grpc-database"),
+		TaskRole:      stack.Role,
+		Compatibility: awsecs.Compatibility_FARGATE,
+		Cpu:           jsii.String("256"),
+		MemoryMiB:     jsii.String("512"),
+	})
+	envContent := map[string]*string{
+		"PORT": jsii.String("5001"),
+	}
+	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/grpc-database:latest"), &awsecs.RepositoryImageProps{})
+	backendContainerDef := def.AddContainer(jsii.String("grpc-database-container"), &awsecs.ContainerDefinitionOptions{
+		Image:                backendContainer,
+		Cpu:                  jsii.Number(256),
+		DisableNetworking:    jsii.Bool(false),
+		Environment:          &envContent,
+		Essential:            jsii.Bool(true),
+		Logging:              backendLogDriver,
+		MemoryLimitMiB:       jsii.Number(512),
+		MemoryReservationMiB: jsii.Number(512),
+		PortMappings: &[]*awsecs.PortMapping{
+			{
+				ContainerPort: jsii.Number(5001),
+				HostPort:      jsii.Number(5001),
+				Protocol:      awsecs.Protocol_TCP,
+			},
+		},
+		StartTimeout: awscdk.Duration_Seconds(jsii.Number(10)),
+		StopTimeout:  awscdk.Duration_Seconds(jsii.Number(10)),
+	})
+
+	// 建立 Service
+	service := awsecs.NewFargateService(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("grpc-database-service")), &awsecs.FargateServiceProps{
+		Cluster: cluster,
+		CloudMapOptions: &awsecs.CloudMapOptions{
+			CloudMapNamespace: stack.CloudMapNamespacesMapping["client"],
+			Container:         backendContainerDef,
+			ContainerPort:     jsii.Number(5001),
+			DnsRecordType:     "A",
+			DnsTtl:            awscdk.Duration_Seconds(jsii.Number(300)),
+			Name:              jsii.String("mysql"),
+		},
+		DesiredCount:      jsii.Number(1),
+		MaxHealthyPercent: jsii.Number(200),
+		MinHealthyPercent: jsii.Number(100),
+		ServiceName:       jsii.String(stack_helper.GenerateNameForResource("grpc-database-service")),
+		TaskDefinition:    def,
+		AssignPublicIp:    jsii.Bool(false),
+		SecurityGroups: &[]awsec2.ISecurityGroup{
+			stack.ContainerSecurityGroup,
+		},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+	})
+	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_GRPC_DATABASE_SERVICE"), &awscdk.CfnOutputProps{
+		Value:       service.ServiceArn(),
+		Description: jsii.String("Default GRPC DATABASE Service Arn"),
+		ExportName:  jsii.String("ECS:GRPCDATABASE:SERVICE"),
+	})
+
+	return def
+}

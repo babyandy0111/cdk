@@ -117,6 +117,7 @@ func main() {
 	ecsStack.RegisterTaskDefinitionAPIManagementBackend(stack_helper.GenerateNameForResource("api-main-backend"), cluster, e["PRIMARY_ECSTASK_ENV"])
 	ecsStack.RegisterTaskDefinitionAPIManagementFrontend(cluster)
 	ecsStack.RegisterTaskDefinitionAPIGateway(cluster, e["APIGATEWAY_ECSTASK_ENV"])
+	ecsStack.RegisterTaskDefinitionFixedMySQLGrpcService(cluster)
 
 	app.Synth(nil)
 }
