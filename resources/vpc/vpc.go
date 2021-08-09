@@ -1,6 +1,7 @@
 package vpc
 
 import (
+	"github.com/andy-demo/gocdk/libs/stack_helper"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awsec2"
 	"github.com/aws/jsii-runtime-go"
@@ -58,13 +59,8 @@ func newVpc(stack awscdk.Stack, CidrBlock *string, CidrMask *float64) awsec2.Vpc
 			SubnetType: awsec2.SubnetType_PUBLIC,
 			CidrMask:   CidrMask,
 		},
-		&awsec2.SubnetConfiguration{
-			Name:       jsii.String("PrivateSubnet"),
-			SubnetType: awsec2.SubnetType_PRIVATE,
-			CidrMask:   CidrMask,
-		},
 	}
-	resource := awsec2.NewVpc(stack, jsii.String("newVpcPreview"), &awsec2.VpcProps{
+	resource := awsec2.NewVpc(stack, jsii.String(stack_helper.GenerateNameForResource("vpc-no-private")), &awsec2.VpcProps{
 		Cidr:                CidrBlock,
 		EnableDnsHostnames:  jsii.Bool(true),
 		EnableDnsSupport:    jsii.Bool(true),

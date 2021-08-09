@@ -370,11 +370,11 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, c
 		MinHealthyPercent:      jsii.Number(100),
 		ServiceName:            jsii.String(stack_helper.GenerateNameForResource("ecs-backend")),
 		TaskDefinition:         def,
-		AssignPublicIp:         jsii.Bool(false),
+		AssignPublicIp:         jsii.Bool(true),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
 			stack.ContainerSecurityGroup,
 		},
-		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PublicSubnets()},
 	})
 	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_BACKEND_SERVICE"), &awscdk.CfnOutputProps{
 		Value:       service.ServiceArn(),
@@ -524,11 +524,11 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(cluster awsec
 		MinHealthyPercent:      jsii.Number(100),
 		ServiceName:            jsii.String(stack_helper.GenerateNameForResource("ecs-frontend")),
 		TaskDefinition:         def,
-		AssignPublicIp:         jsii.Bool(false),
+		AssignPublicIp:         jsii.Bool(true),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
 			stack.ContainerSecurityGroup,
 		},
-		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PublicSubnets()},
 	})
 	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_FRONTEND_SERVICE"), &awscdk.CfnOutputProps{
 		Value:       service.ServiceArn(),
@@ -627,11 +627,11 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, 
 		MinHealthyPercent:      jsii.Number(100),
 		ServiceName:            jsii.String(stack_helper.GenerateNameForResource("apigateway")),
 		TaskDefinition:         def,
-		AssignPublicIp:         jsii.Bool(false),
+		AssignPublicIp:         jsii.Bool(true),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
 			stack.ContainerSecurityGroup,
 		},
-		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PublicSubnets()},
 	})
 	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_APIGATEWAY_SERVICE"), &awscdk.CfnOutputProps{
 		Value:       service.ServiceArn(),
@@ -703,11 +703,11 @@ func (stack *ECSStack) RegisterTaskDefinitionFixedMySQLGrpcService(cluster awsec
 		MinHealthyPercent: jsii.Number(100),
 		ServiceName:       jsii.String(stack_helper.GenerateNameForResource("grpc-database-service")),
 		TaskDefinition:    def,
-		AssignPublicIp:    jsii.Bool(false),
+		AssignPublicIp:    jsii.Bool(true),
 		SecurityGroups: &[]awsec2.ISecurityGroup{
 			stack.ContainerSecurityGroup,
 		},
-		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PrivateSubnets()},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PublicSubnets()},
 	})
 	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_GRPC_DATABASE_SERVICE"), &awscdk.CfnOutputProps{
 		Value:       service.ServiceArn(),

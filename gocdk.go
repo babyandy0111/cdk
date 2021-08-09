@@ -101,7 +101,9 @@ func main() {
 	internalDomain := fmt.Sprintf("%s.management.internal", stack_helper.GetEnv())
 	clientDomain := fmt.Sprintf("%s.client.internal", stack_helper.GetEnv())
 	internalNamespace := serviceDiscoveryStack.NewInternalPrivateDnsNamespace(internalDomain, "internal service for core system")
+	fmt.Println(internalNamespace)
 	clientNamespace := serviceDiscoveryStack.NewInternalClientDnsNamespace(clientDomain, "client service for client system")
+	fmt.Println(clientNamespace)
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ECSStack"))
