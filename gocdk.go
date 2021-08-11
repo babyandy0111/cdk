@@ -5,6 +5,7 @@ import (
 	"github.com/andy-demo/gocdk/libs/stack_helper"
 	"github.com/andy-demo/gocdk/resources/acm"
 	"github.com/andy-demo/gocdk/resources/ecs"
+	"github.com/andy-demo/gocdk/resources/s3"
 	"github.com/andy-demo/gocdk/resources/servicediscovery"
 	"github.com/andy-demo/gocdk/resources/vpc"
 	"github.com/aws/aws-cdk-go/awscdk"
@@ -104,6 +105,12 @@ func main() {
 	fmt.Println(internalNamespace)
 	clientNamespace := serviceDiscoveryStack.NewInternalClientDnsNamespace(clientDomain, "client service for client system")
 	fmt.Println(clientNamespace)
+
+	// 建立 S3/ Cloudfront
+	props.StackName = jsii.String(stack_helper.GenerateNameForResource("S3Stack"))
+	s3Stack := s3.New(rootStack, jsii.String(stack_helper.GenerateNameForResource("S3Stack")), &props)
+	s3Stack.Stack.AddDependency(acmStack, jsii.String("Waiting ACM Updated"))
+	s3Stack.CreateStorageBucket(acmResource)
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ECSStack"))

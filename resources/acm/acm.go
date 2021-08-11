@@ -23,5 +23,10 @@ func NewACM(parentStack awscdk.Stack, name *string, props *awscdk.StackProps) (a
 		SubjectAlternativeNames: &inputOtherDomains,
 		Validation:              awscertificatemanager.CertificateValidation_FromDns(hostzone),
 	})
+	awscdk.NewCfnOutput(stack, jsii.String("ACM_CERTIFICATE_ARN"), &awscdk.CfnOutputProps{
+		Value:       resource.CertificateArn(),
+		Description: jsii.String("Default Certificate for Default Domain"),
+		ExportName:  jsii.String("ACM:CERTIFICATE:ARN"),
+	})
 	return stack, resource
 }
