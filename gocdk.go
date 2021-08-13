@@ -110,7 +110,7 @@ func main() {
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("S3Stack"))
 	s3Stack := s3.New(rootStack, jsii.String(stack_helper.GenerateNameForResource("S3Stack")), &props)
 	s3Stack.Stack.AddDependency(acmStack, jsii.String("Waiting ACM Updated"))
-	s3Stack.CreateStorageBucket(acmResource, Vpc.Vpc)
+	s3Stack.CreateStorageBucket(acmResource, Vpc.Vpc, e["PRIMARY_ECSTASK_ENV"])
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ECSStack"))

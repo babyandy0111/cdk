@@ -42,7 +42,7 @@ func New(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) 
 	return obj
 }
 
-func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertificate, vpc awsec2.IVpc) {
+func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertificate, vpc awsec2.IVpc, lambdaenv map[string]string) {
 	bucketName := stack_helper.GenerateNameForResource("upload") + "." + os.Getenv("ACM_MAIN_DOMAIN")
 	// 建立OAI
 	oai := awscloudfront.NewOriginAccessIdentity(s.Stack, jsii.String("cf-oai"), &awscloudfront.OriginAccessIdentityProps{
@@ -125,18 +125,29 @@ func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertifi
 		AllowAllOutbound:  jsii.Bool(true),
 		AllowPublicSubnet: jsii.Bool(true),
 		Description:       jsii.String(stack_helper.GetEnv() + " lambda for getting s3 put/delete info"),
-		Environment:       nil,
-		FunctionName:      jsii.String(stack_helper.GenerateNameForResource("s3-notify-lambda")),
-		MemorySize:        jsii.Number(128),
-		Role:              iamrole,
-		SecurityGroups:    nil,
-		Timeout:           awscdk.Duration_Seconds(jsii.Number(10)),
-		Tracing:           awslambda.Tracing_DISABLED,
-		Vpc:               vpc,
-		VpcSubnets:        &awsec2.SubnetSelection{Subnets: vpc.PublicSubnets()},
-		Code:              awslambda.Code_FromBucket(s.PackageBucket, jsii.String("20200407-a341030-hello-lambda.zip"), nil),
-		Handler:           jsii.String("resource-counter"),
-		Runtime:           awslambda.Runtime_GO_1_X(),
+		Environment: &map[string]*string{
+			"DB_USER":            jsii.String(lambdaenv["DB_USER"]),
+			"DB_PASSWORD":        jsii.String(lambdaenv["DB_PASSWORD"]),
+			"DB_HOST":            jsii.String(lambdaenv["DB_HOST"]),
+			"DB_PORT":            jsii.String(lambdaenv["DB_PORT"]),
+			"DB_NAME":            jsii.String(lambdaenv["DB_NAME"]),
+			"DB_SLAVE1_USER":     jsii.String(lambdaenv["DB_SLAVE1_USER"]),
+			"DB_SLAVE1_PASSWORD": jsii.String(lambdaenv["DB_SLAVE1_PASSWORD"]),
+			"DB_SLAVE1_HOST":     jsii.String(lambdaenv["DB_SLAVE1_HOST"]),
+			"DB_SLAVE1_PORT":     jsii.String(lambdaenv["DB_SLAVE1_PORT"]),
+			"ENVIRONMENT":        jsii.String(lambdaenv["ENVIRONMENT"]),
+		},
+		FunctionName:   jsii.String(stack_helper.GenerateNameForResource("s3-notify-lambda")),
+		MemorySize:     jsii.Number(128),
+		Role:           iamrole,
+		SecurityGroups: nil,
+		Timeout:        awscdk.Duration_Seconds(jsii.Number(10)),
+		Tracing:        awslambda.Tracing_DISABLED,
+		Vpc:            vpc,
+		VpcSubnets:     &awsec2.SubnetSelection{Subnets: vpc.PublicSubnets()},
+		Code:           awslambda.Code_FromBucket(s.PackageBucket, jsii.String("20200407-a341030-hello-lambda.zip"), nil),
+		Handler:        jsii.String("resource-counter"),
+		Runtime:        awslambda.Runtime_GO_1_X(),
 	})
 	bucket.AddObjectCreatedNotification(awss3notifications.NewLambdaDestination(lambdaFunc))
 	bucket.AddObjectRemovedNotification(awss3notifications.NewLambdaDestination(lambdaFunc))
