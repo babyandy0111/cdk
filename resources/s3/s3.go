@@ -4,32 +4,45 @@ import (
 	"fmt"
 	"github.com/andy-demo/gocdk/libs/stack_helper"
 	"github.com/andy-demo/gocdk/resources/route53"
+	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awscertificatemanager"
+	"github.com/aws/aws-cdk-go/awscdk/awscloudfront"
 	"github.com/aws/aws-cdk-go/awscdk/awscloudfrontorigins"
+	"github.com/aws/aws-cdk-go/awscdk/awsec2"
 	"github.com/aws/aws-cdk-go/awscdk/awsiam"
+	"github.com/aws/aws-cdk-go/awscdk/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/awsroute53"
 	"github.com/aws/aws-cdk-go/awscdk/awsroute53targets"
 	"github.com/aws/aws-cdk-go/awscdk/awss3"
-	//"github.com/andy-demo/gocdk/resources/route53"
-	"github.com/aws/aws-cdk-go/awscdk"
-	//"github.com/aws/aws-cdk-go/awscdk/awscertificatemanager"
-	"github.com/aws/aws-cdk-go/awscdk/awscloudfront"
-	//"github.com/aws/aws-cdk-go/awscdk/awscloudfrontorigins"
-	//"github.com/aws/aws-cdk-go/awscdk/awss3"
+	"github.com/aws/aws-cdk-go/awscdk/awss3notifications"
 	"github.com/aws/jsii-runtime-go"
 	"os"
 )
 
 type S3Stack struct {
-	Stack awscdk.Stack
+	Stack         awscdk.Stack
+	PackageBucket awss3.IBucket
 }
 
 func New(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) *S3Stack {
 	stack := awscdk.NewStack(parentStack, stackName, props)
-	return &S3Stack{Stack: stack}
+	obj := &S3Stack{Stack: stack}
+	packageBucketName := "codegenapps-package"
+
+	obj.PackageBucket = awss3.Bucket_FromBucketName(stack, jsii.String("package-bucket-name"), jsii.String(packageBucketName))
+	if obj.PackageBucket == nil {
+		obj.PackageBucket = awss3.NewBucket(stack, jsii.String(packageBucketName), &awss3.BucketProps{
+			AccessControl:     awss3.BucketAccessControl_PRIVATE,
+			BlockPublicAccess: awss3.BlockPublicAccess_BLOCK_ALL(),
+			BucketName:        jsii.String(packageBucketName),
+			Versioned:         jsii.Bool(false),
+		})
+	}
+
+	return obj
 }
 
-func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertificate) {
+func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertificate, vpc awsec2.IVpc) {
 	bucketName := stack_helper.GenerateNameForResource("upload") + "." + os.Getenv("ACM_MAIN_DOMAIN")
 	// 建立OAI
 	oai := awscloudfront.NewOriginAccessIdentity(s.Stack, jsii.String("cf-oai"), &awscloudfront.OriginAccessIdentityProps{
@@ -82,10 +95,51 @@ func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertifi
 		},
 		Sid: jsii.String("DefaultUploadBucketPolicy"),
 	}))
-	//policy := awss3.NewBucketPolicy(s.Stack, jsii.String(""), &awss3.BucketPolicyProps{
-	//	Bucket:        bucket,
-	//	RemovalPolicy: "",
-	//})
+	// 建立 lambda 準備接收上傳與移除檔案大小資訊
+	// 建立 iamrole
+	iamrole := awsiam.NewRole(s.Stack, jsii.String("s3-notify-lambda-role"), &awsiam.RoleProps{
+		AssumedBy:   awsiam.NewServicePrincipal(jsii.String("lambda.amazonaws.com"), &awsiam.ServicePrincipalOpts{}),
+		Description: jsii.String("For general upload notification"),
+		InlinePolicies: &map[string]awsiam.PolicyDocument{
+			"access-s3-policy": awsiam.NewPolicyDocument(&awsiam.PolicyDocumentProps{
+				AssignSids: jsii.Bool(true),
+				Statements: &[]awsiam.PolicyStatement{
+					awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+						Actions: &[]*string{
+							jsii.String("s3:*"),
+							jsii.String("logs:*"),
+							jsii.String("ec2:*"),
+						},
+						Effect: awsiam.Effect_ALLOW,
+						Resources: &[]*string{
+							jsii.String("*"),
+						},
+					}),
+				},
+			}),
+		},
+		Path:     jsii.String("/"),
+		RoleName: jsii.String(stack_helper.GenerateNameForResource("s3-notify")),
+	})
+	lambdaFunc := awslambda.NewFunction(s.Stack, jsii.String("s3-notify-lambda"), &awslambda.FunctionProps{
+		AllowAllOutbound:  jsii.Bool(true),
+		AllowPublicSubnet: jsii.Bool(true),
+		Description:       jsii.String(stack_helper.GetEnv() + " lambda for getting s3 put/delete info"),
+		Environment:       nil,
+		FunctionName:      jsii.String(stack_helper.GenerateNameForResource("s3-notify-lambda")),
+		MemorySize:        jsii.Number(128),
+		Role:              iamrole,
+		SecurityGroups:    nil,
+		Timeout:           awscdk.Duration_Seconds(jsii.Number(10)),
+		Tracing:           awslambda.Tracing_DISABLED,
+		Vpc:               vpc,
+		VpcSubnets:        &awsec2.SubnetSelection{Subnets: vpc.PublicSubnets()},
+		Code:              awslambda.Code_FromBucket(s.PackageBucket, jsii.String("20200407-a341030-hello-lambda.zip"), nil),
+		Handler:           jsii.String("resource-counter"),
+		Runtime:           awslambda.Runtime_GO_1_X(),
+	})
+	bucket.AddObjectCreatedNotification(awss3notifications.NewLambdaDestination(lambdaFunc))
+	bucket.AddObjectRemovedNotification(awss3notifications.NewLambdaDestination(lambdaFunc))
 	// 建立 cloudfront
 	var subdomainName = stack_helper.GenerateNameForResource("upload")
 	if stack_helper.GetEnv() == "production" {
