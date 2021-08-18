@@ -5,12 +5,14 @@ import (
 	"github.com/andy-demo/gocdk/libs/stack_helper"
 	"github.com/aws/aws-cdk-go/awscdk"
 	"github.com/aws/aws-cdk-go/awscdk/awscertificatemanager"
+	"github.com/aws/aws-cdk-go/awscdk/awscloudfront"
 	"github.com/aws/aws-cdk-go/awscdk/awsec2"
 	"github.com/aws/aws-cdk-go/awscdk/awsecs"
 	"github.com/aws/aws-cdk-go/awscdk/awselasticloadbalancingv2"
 	"github.com/aws/aws-cdk-go/awscdk/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/awslogs"
 	"github.com/aws/aws-cdk-go/awscdk/awsroute53"
+	"github.com/aws/aws-cdk-go/awscdk/awss3"
 	"github.com/aws/aws-cdk-go/awscdk/awsservicediscovery"
 	"github.com/aws/jsii-runtime-go"
 	"os"
@@ -541,7 +543,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(cluster awsec
 	}...)
 	return def
 }
-func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, env map[string]string) awsecs.TaskDefinition {
+func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, env map[string]string, pk awscloudfront.PublicKey, bucket awss3.IBucket) awsecs.TaskDefinition {
 	name := stack_helper.GenerateNameForResource("apigateway")
 	apigatewayLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-apigateway")), &awslogs.LogGroupProps{
 		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("backend-apigateway")),
@@ -570,6 +572,15 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, 
 		MemoryMiB:     jsii.String("512"),
 	})
 	envContent := stack.generateMapPointer(env)
+	envContent["CF_KEY_ID"] = pk.PublicKeyId()
+	envContent["PRIVATE_KEY_BUCKET"] = bucket.BucketName()
+	envContent["PRIVATE_KEY_PATH"] = jsii.String("keys/cfkey.pem")
+	var subdomainName = stack_helper.GenerateNameForResource("upload")
+	if stack_helper.GetEnv() == "production" {
+		subdomainName = "upload"
+	}
+	envContent["CF_DOMAIN_NAME"] = jsii.String(fmt.Sprintf("%s.%s", subdomainName, os.Getenv("ACM_MAIN_DOMAIN")))
+
 	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/apigateway:latest"), &awsecs.RepositoryImageProps{})
 	def.AddContainer(jsii.String("api-backend"), &awsecs.ContainerDefinitionOptions{
 		Image:                backendContainer,

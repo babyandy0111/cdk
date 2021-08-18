@@ -42,7 +42,7 @@ func New(parentStack awscdk.Stack, stackName *string, props *awscdk.StackProps) 
 	return obj
 }
 
-func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertificate, vpc awsec2.IVpc, lambdaenv map[string]string) {
+func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertificate, vpc awsec2.IVpc, lambdaenv map[string]string) (awscloudfront.OriginAccessIdentity, awscloudfront.PublicKey) {
 	bucketName := stack_helper.GenerateNameForResource("upload") + "." + os.Getenv("ACM_MAIN_DOMAIN")
 	// 建立OAI
 	oai := awscloudfront.NewOriginAccessIdentity(s.Stack, jsii.String("cf-oai"), &awscloudfront.OriginAccessIdentityProps{
@@ -189,4 +189,12 @@ func (s *S3Stack) CreateStorageBucket(certificate awscertificatemanager.ICertifi
 		Ttl:        awscdk.Duration_Seconds(jsii.Number(300)),
 		Target:     awsroute53.RecordTarget_FromAlias(awsroute53targets.NewCloudFrontTarget(cf)),
 	})
+
+	awscdk.NewCfnOutput(s.Stack, jsii.String("CLOUDFRONT_OAI_ID"), &awscdk.CfnOutputProps{
+		Value:       oai.OriginAccessIdentityName(),
+		Description: jsii.String("oai id"),
+		ExportName:  jsii.String("CLOUDFRONT:OAI:ID"),
+	})
+
+	return oai, pk
 }

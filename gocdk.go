@@ -110,13 +110,14 @@ func main() {
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("S3Stack"))
 	s3Stack := s3.New(rootStack, jsii.String(stack_helper.GenerateNameForResource("S3Stack")), &props)
 	s3Stack.Stack.AddDependency(acmStack, jsii.String("Waiting ACM Updated"))
-	s3Stack.CreateStorageBucket(acmResource, Vpc.Vpc, e["PRIMARY_ECSTASK_ENV"])
+	_, publicKey := s3Stack.CreateStorageBucket(acmResource, Vpc.Vpc, e["PRIMARY_ECSTASK_ENV"])
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ECSStack"))
 	ecsStack := ecs.NewECS(rootStack, jsii.String(stack_helper.GenerateNameForResource("ECSStack")), Vpc.Vpc, acmResource, &props)
 	ecsStack.Stack.AddDependency(Vpc.Stack, jsii.String("Waiting for VPCStack update"))
 	ecsStack.Stack.AddDependency(serviceDiscoveryStack.Stack, jsii.String("Waiting for ServiceDiscoveryStack update"))
+	ecsStack.Stack.AddDependency(s3Stack.Stack, jsii.String("Waiting for S3Stack"))
 	ecsStack.SetCloudmapDnsNamespace(internalNamespace)
 	ecsStack.SetCloudmapDnsNamespacesMapping("management", internalNamespace)
 	ecsStack.SetCloudmapDnsNamespacesMapping("client", clientNamespace)
@@ -125,7 +126,7 @@ func main() {
 	// 建立 ECS TaskDefinition
 	ecsStack.RegisterTaskDefinitionAPIManagementBackend(stack_helper.GenerateNameForResource("api-main-backend"), cluster, e["PRIMARY_ECSTASK_ENV"])
 	ecsStack.RegisterTaskDefinitionAPIManagementFrontend(cluster)
-	ecsStack.RegisterTaskDefinitionAPIGateway(cluster, e["APIGATEWAY_ECSTASK_ENV"])
+	ecsStack.RegisterTaskDefinitionAPIGateway(cluster, e["APIGATEWAY_ECSTASK_ENV"], publicKey, s3Stack.PackageBucket)
 	ecsStack.RegisterTaskDefinitionFixedMySQLGrpcService(cluster)
 
 	app.Synth(nil)
