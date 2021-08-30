@@ -227,7 +227,7 @@ func (stack *ECSStack) generateMapPointer(env map[string]string) map[string]*str
 }
 
 // 設定 Backend 所使用的Task Definition
-func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, cluster awsecs.Cluster, env map[string]string) awsecs.TaskDefinition {
+func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, cluster awsecs.Cluster, env map[string]string, uploadBucket awss3.IBucket) awsecs.TaskDefinition {
 	stack_helper.GenerateNameForResource("backend")
 	backendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-api")), &awslogs.LogGroupProps{
 		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("backend-api")),
@@ -267,6 +267,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementBackend(name string, c
 	envContent["AWS_CLIENT_INTERNAL_DOMAIN_ID"] = stack.CloudMapNamespacesMapping["client"].NamespaceId()
 	envContent["AWS_MANAGEMENT_INTERNAL_DOMAIN_ID"] = stack.CloudMapNamespacesMapping["management"].NamespaceId()
 	envContent["AWS_MAIN_DOMAIN"] = jsii.String(os.Getenv("ACM_MAIN_DOMAIN"))
+	envContent["UPLOAD_BUCKET"] = uploadBucket.BucketName()
 	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/api-automation-backend:latest"), &awsecs.RepositoryImageProps{})
 	def.AddContainer(jsii.String("api-backend"), &awsecs.ContainerDefinitionOptions{
 		Image:                backendContainer,
@@ -543,7 +544,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIManagementFrontend(cluster awsec
 	}...)
 	return def
 }
-func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, env map[string]string, pk awscloudfront.PublicKey, bucket awss3.IBucket) awsecs.TaskDefinition {
+func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, env map[string]string, pk awscloudfront.PublicKey, bucket awss3.IBucket, uploadBucket awss3.IBucket) awsecs.TaskDefinition {
 	name := stack_helper.GenerateNameForResource("apigateway")
 	apigatewayLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("backend-apigateway")), &awslogs.LogGroupProps{
 		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("backend-apigateway")),
@@ -575,6 +576,7 @@ func (stack *ECSStack) RegisterTaskDefinitionAPIGateway(cluster awsecs.Cluster, 
 	envContent["CF_KEY_ID"] = pk.PublicKeyId()
 	envContent["PRIVATE_KEY_BUCKET"] = bucket.BucketName()
 	envContent["PRIVATE_KEY_PATH"] = jsii.String("keys/cfkey.pem")
+	envContent["UPLOAD_BUCKET"] = uploadBucket.BucketName()
 	var subdomainName = stack_helper.GenerateNameForResource("upload")
 	if stack_helper.GetEnv() == "production" {
 		subdomainName = "upload"
