@@ -34,7 +34,7 @@ function encryptedValue (key, value) {
 
 
 // 可以操作的 repository
-let usedRepos = ["api-automation-backend", "grpc-server", "apigateway", "api-automation-frontend"];
+let usedRepos = ["api-automation-backend", "grpc-server", "apigateway", "api-automation-frontend", "nginx-resizer"];
 // 初始化 github
 const github = new Octokit({auth: process.env.GITHUB_TOKEN})
 

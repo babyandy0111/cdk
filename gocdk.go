@@ -110,7 +110,7 @@ func main() {
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("S3Stack"))
 	s3Stack := s3.New(rootStack, jsii.String(stack_helper.GenerateNameForResource("S3Stack")), &props)
 	s3Stack.Stack.AddDependency(acmStack, jsii.String("Waiting ACM Updated"))
-	fsBucket, _, publicKey := s3Stack.CreateStorageBucket(acmResource, Vpc.Vpc, e["PRIMARY_ECSTASK_ENV"])
+	fsBucket, _, publicKey, defaultDomain := s3Stack.CreateStorageBucket(acmResource, Vpc.Vpc, e["PRIMARY_ECSTASK_ENV"])
 
 	// 建立 ECS 相關服務 (ECS Task Definition / Service / Cloudmap / Load Balancer)
 	props.StackName = jsii.String(stack_helper.GenerateNameForResource("ECSStack"))
@@ -128,6 +128,7 @@ func main() {
 	ecsStack.RegisterTaskDefinitionAPIManagementFrontend(cluster)
 	ecsStack.RegisterTaskDefinitionAPIGateway(cluster, e["APIGATEWAY_ECSTASK_ENV"], publicKey, s3Stack.PackageBucket, fsBucket)
 	ecsStack.RegisterTaskDefinitionFixedMySQLGrpcService(cluster)
+	ecsStack.RegisterTaskDefinitionNginxThumbService(cluster, *defaultDomain)
 
 	app.Synth(nil)
 }

@@ -63,6 +63,7 @@ func generateGithubJson(envType string) error {
 	j2["ECS_BACKEND_SERVICE"] = j1[shortEnvName+"-ECSStack"]["ECSBACKENDSERVICE"]
 	j2["ECS_CLUSTER"] = j1[shortEnvName+"-ECSStack"]["ECSCLUSTERARN"]
 	j2["ECS_FRONTEND_SERVICE"] = j1[shortEnvName+"-ECSStack"]["ECSFRONTENDSERVICE"]
+	j2["ECS_NGINXTHUMB_SERVICE"] = j1[shortEnvName+"-ECSStack"]["ECSNGINXTHUMBSERVICE"]
 	j2["MYSQL_HOST"] = c["MYSQLHOST"]
 	j2["MYSQL_PASSWORD"] = c["MYSQLPASSWORD"]
 	j2["MYSQL_USER"] = c["MYSQLUSER"]

@@ -730,3 +730,79 @@ func (stack *ECSStack) RegisterTaskDefinitionFixedMySQLGrpcService(cluster awsec
 
 	return def
 }
+func (stack *ECSStack) RegisterTaskDefinitionNginxThumbService(cluster awsecs.Cluster, defaultDomain string) awsecs.TaskDefinition {
+	backendLogGroup := awslogs.NewLogGroup(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("nginx-thumb")), &awslogs.LogGroupProps{
+		LogGroupName:  jsii.String(stack_helper.GenerateNameForResource("nginx-thumb")),
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+		Retention:     awslogs.RetentionDays_ONE_MONTH,
+	})
+	backendLogDriver := awsecs.NewAwsLogDriver(&awsecs.AwsLogDriverProps{
+		StreamPrefix: jsii.String("log-message-"),
+		LogGroup:     backendLogGroup,
+	})
+	def := awsecs.NewTaskDefinition(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("nginx-thumb-def")), &awsecs.TaskDefinitionProps{
+		ExecutionRole: stack.Role,
+		Family:        jsii.String("nginx-thumb"),
+		TaskRole:      stack.Role,
+		Compatibility: awsecs.Compatibility_FARGATE,
+		Cpu:           jsii.String("256"),
+		MemoryMiB:     jsii.String("512"),
+	})
+	envContent := map[string]*string{
+		"PORT":        jsii.String("80"),
+		"CACHE_NAME":  jsii.String("thumb-cache"),
+		"CACHE_SIZE":  jsii.String("500m"),
+		"SOURCE_HOST": jsii.String("https://" + defaultDomain),
+		"EXPIRE_TIME": jsii.String("10s"),
+	}
+	backendContainer := awsecs.ContainerImage_FromRegistry(jsii.String("babyandy0111/nginx-resizer:latest"), &awsecs.RepositoryImageProps{})
+	backendContainerDef := def.AddContainer(jsii.String("nginx-thumb-container"), &awsecs.ContainerDefinitionOptions{
+		Image:                backendContainer,
+		Cpu:                  jsii.Number(256),
+		DisableNetworking:    jsii.Bool(false),
+		Environment:          &envContent,
+		Essential:            jsii.Bool(true),
+		Logging:              backendLogDriver,
+		MemoryLimitMiB:       jsii.Number(512),
+		MemoryReservationMiB: jsii.Number(512),
+		PortMappings: &[]*awsecs.PortMapping{
+			{
+				ContainerPort: jsii.Number(80),
+				HostPort:      jsii.Number(80),
+				Protocol:      awsecs.Protocol_TCP,
+			},
+		},
+		StartTimeout: awscdk.Duration_Seconds(jsii.Number(10)),
+		StopTimeout:  awscdk.Duration_Seconds(jsii.Number(10)),
+	})
+
+	// 建立 Service
+	service := awsecs.NewFargateService(stack.Stack, jsii.String(stack_helper.GenerateNameForResource("nginx-thumb-service")), &awsecs.FargateServiceProps{
+		Cluster: cluster,
+		CloudMapOptions: &awsecs.CloudMapOptions{
+			CloudMapNamespace: stack.CloudMapNamespacesMapping["management"],
+			Container:         backendContainerDef,
+			ContainerPort:     jsii.Number(80),
+			DnsRecordType:     "A",
+			DnsTtl:            awscdk.Duration_Seconds(jsii.Number(300)),
+			Name:              jsii.String("thumb"),
+		},
+		DesiredCount:      jsii.Number(1),
+		MaxHealthyPercent: jsii.Number(200),
+		MinHealthyPercent: jsii.Number(100),
+		ServiceName:       jsii.String(stack_helper.GenerateNameForResource("nginx-thumb-service")),
+		TaskDefinition:    def,
+		AssignPublicIp:    jsii.Bool(true),
+		SecurityGroups: &[]awsec2.ISecurityGroup{
+			stack.ContainerSecurityGroup,
+		},
+		VpcSubnets: &awsec2.SubnetSelection{Subnets: stack.Vpc.PublicSubnets()},
+	})
+	awscdk.NewCfnOutput(stack.Stack, jsii.String("ECS_NGINX_THUMB_SERVICE"), &awscdk.CfnOutputProps{
+		Value:       service.ServiceArn(),
+		Description: jsii.String("Default Nginx Thumb Service Arn"),
+		ExportName:  jsii.String("ECS:NGINXTHUMB:SERVICE"),
+	})
+
+	return def
+}
